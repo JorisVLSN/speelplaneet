@@ -9,7 +9,7 @@ const games = [
   { id: "mastermind", title: "Kleurcode", icon: "🎨", color: "green", description: "Kraak de geheime kleurcode.", modes: "100 levels" },
   { id: "rekensprint", title: "Rekensprint", icon: "➕", color: "orange", description: "Los snelle sommen op.", modes: "100 levels" },
   { id: "simon", title: "Sterrenreeks", icon: "✨", color: "purple", description: "Onthoud de kleurenreeks.", modes: "100 levels" },
-  { id: "ruimterunner", title: "Ruimterunner", icon: "🏃", color: "blue", description: "Spring over robots en buk voor ufo’s.", modes: "Ellie of Mila · 100 levels" },
+  { id: "ruimterunner", title: "Ruimterunner", icon: "🏃", color: "blue", description: "Spring over robots en buk voor ufo’s.", modes: "Ellie, Mila of Mats · 100 levels" },
 ];
 
 const state = {
@@ -743,17 +743,20 @@ function renderSpaceRunner() {
   const target = Math.min(35, 8 + Math.floor((level - 1) / 4));
   const startSpeed = 2.1 + level * .006;
   let character = localStorage.getItem("speelplaneet-runner") || "ellie";
-  let running = false, jumping = false, ducking = false, y = 0, velocity = 0;
+  if (!["ellie","mila","mats"].includes(character)) character = "ellie";
+  const runnerName = name => ({ ellie:"Ellie", mila:"Mila", mats:"Mats" }[name] || "Ellie");
+  let running = false, jumping = false, ducking = false, y = 0, velocity = 0, duckUntil = 0, duckTimer = 0;
   let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
   const obstacles = [];
 
   stage.innerHTML = `<div class="game-panel runner-panel">
-    <p class="eyebrow">OFFLINE RUIMTEMISSIE</p><h2>🏃 Ellie & Mila’s Ruimterunner</h2>
+    <p class="eyebrow">OFFLINE RUIMTEMISSIE</p><h2>🏃 Ruimterunner</h2>
     <p class="game-subtitle">Spring over ruimterobots en buk onder vliegende ufo’s. Dit spel blijft ook zonder internet werken.</p>
     <div class="runner-toolbar">
       <div class="runner-choices">
         <button class="runner-choice ${character === "ellie" ? "active" : ""}" data-runner-choice="ellie"><img src="assets/ellie-runner-transparent.png" alt="" /><span>Ellie</span></button>
         <button class="runner-choice ${character === "mila" ? "active" : ""}" data-runner-choice="mila"><img src="assets/mila-runner-transparent.png" alt="" /><span>Mila</span></button>
+        <button class="runner-choice ${character === "mats" ? "active" : ""}" data-runner-choice="mats"><img src="assets/mats-runner-transparent.png" alt="" /><span>Mats</span></button>
       </div>
       <div class="runner-score"><small>MISSIE</small><strong><span id="runner-score">0</span> / ${target}</strong></div>
     </div>
@@ -761,7 +764,7 @@ function renderSpaceRunner() {
     <div class="runner-world" id="runner-world" tabindex="0" aria-label="Ruimterunner speelveld">
       <div class="space-stars"></div><div class="space-planet planet-a"></div><div class="space-planet planet-b"></div>
       <div class="runner-ground"></div>
-      <img class="runner-character" id="runner-character" src="assets/${character}-runner-transparent.png" alt="${character === "ellie" ? "Ellie" : "Mila"} rent door de ruimte" />
+      <img class="runner-character" id="runner-character" src="assets/${character}-runner-transparent.png" alt="${runnerName(character)} rent door de ruimte" />
     </div>
     <div class="runner-controls">
       <button class="runner-action jump-action" id="runner-jump">↑ Spring</button>
@@ -780,19 +783,32 @@ function renderSpaceRunner() {
     character = name;
     localStorage.setItem("speelplaneet-runner", name);
     runner.src = `assets/${name}-runner-transparent.png`;
-    runner.alt = `${name === "ellie" ? "Ellie" : "Mila"} rent door de ruimte`;
+    runner.alt = `${runnerName(name)} rent door de ruimte`;
     document.querySelectorAll("[data-runner-choice]").forEach(button => button.classList.toggle("active", button.dataset.runnerChoice === name));
   };
 
   const jump = () => {
     if (!running || jumping) return;
-    jumping = true; ducking = false; runner.classList.remove("ducking");
-    velocity = 13.2;
+    jumping = true; ducking = false; duckUntil = 0; clearTimeout(duckTimer); runner.classList.remove("ducking");
+    velocity = 12.6;
   };
   const duck = active => {
     if (!running || jumping) return;
-    ducking = active;
-    runner.classList.toggle("ducking", active);
+    if (active) {
+      ducking = true;
+      duckUntil = Math.max(duckUntil, performance.now() + 720);
+      clearTimeout(duckTimer);
+      runner.classList.add("ducking");
+      return;
+    }
+    const remaining = duckUntil - performance.now();
+    if (remaining > 0) {
+      clearTimeout(duckTimer);
+      duckTimer = setTimeout(() => duck(false), remaining);
+      return;
+    }
+    ducking = false;
+    runner.classList.remove("ducking");
   };
 
   const spawnObstacle = () => {
@@ -818,9 +834,10 @@ function renderSpaceRunner() {
   const finish = won => {
     running = false;
     cancelAnimationFrame(frame);
+    clearTimeout(duckTimer);
     $("#runner-start").classList.remove("hidden");
     $("#runner-start").textContent = won ? "Speel nog eens" : "Probeer opnieuw";
-    status.textContent = won ? `🏆 ${character === "ellie" ? "Ellie" : "Mila"} heeft de ruimtemissie voltooid!` : "Botsing! Gelukkig beschermde het ruimtepak je.";
+    status.textContent = won ? `🏆 ${runnerName(character)} heeft de ruimtemissie voltooid!` : "Botsing! Gelukkig beschermde het ruimtepak je.";
     if (won) completeGame("ruimterunner", "Ruimtemissie voltooid!");
   };
 
@@ -839,7 +856,7 @@ function renderSpaceRunner() {
     }
     if (jumping) {
       y += velocity * (delta / 16.7);
-      velocity -= .72 * (delta / 16.7);
+      velocity -= .43 * (delta / 16.7);
       if (y <= 0) { y = 0; velocity = 0; jumping = false; }
       runner.style.transform = `translateY(${-y}px)`;
     }
@@ -861,7 +878,7 @@ function renderSpaceRunner() {
 
   const start = () => {
     obstacles.splice(0).forEach(obstacle => obstacle.element.remove());
-    running = true; jumping = false; ducking = false; y = 0; velocity = 0; passed = 0; distance = 0;
+    running = true; jumping = false; ducking = false; duckUntil = 0; clearTimeout(duckTimer); y = 0; velocity = 0; passed = 0; distance = 0;
     nextSpawn = 1450 + random() * 650; runner.style.transform = ""; runner.classList.remove("ducking");
     $("#runner-score").textContent = "0"; $("#runner-start").classList.add("hidden");
     status.textContent = "De missie is gestart — let goed op!";
@@ -888,6 +905,7 @@ function renderSpaceRunner() {
   state.gameCleanup = () => {
     running = false;
     cancelAnimationFrame(frame);
+    clearTimeout(duckTimer);
     document.removeEventListener("keydown", keyHandler);
     document.removeEventListener("keyup", keyUpHandler);
   };

@@ -27,6 +27,6 @@ Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken
 
 - Zeeslag, Galgje, Vier op een rij en Boter-kaas-en-eieren: solo en online met joincode
 - Mini Sudoku, Woordzoeker, Memory, Kleurcode, Rekensprint en Sterrenreeks: solo met sterren en levels
-- Ruimterunner: kies Ellie of Mila, spring over robots en buk voor ufo's; speelbaar zonder internet
+- Ruimterunner: kies Ellie, Mila of Mats, spring over robots en buk voor ufo's; speelbaar zonder internet
 
 Ieder spel heeft 100 unieke, oplopende niveaus. Elk spel/level-paar heeft een vaste missiecode en een deterministische puzzelconfiguratie. Daardoor blijft bijvoorbeeld niveau 37 bij een volgend bezoek dezelfde uitdaging, maar gebruikt geen ander niveau exact dezelfde configuratie. Na het voltooien van een niveau wordt automatisch het volgende niveau vrijgespeeld. De moeilijkheid groeit via langere woorden en reeksen, minder hints, unieke bordindelingen en codes, moeilijkere sommen en sterkere computertegenstanders.

@@ -269,7 +269,7 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .simon-pad.flash { opacity:1;transform:scale(1.06);filter:brightness(1.28);box-shadow:0 0 30px currentColor; }
 .runner-panel { overflow:hidden; }
 .runner-toolbar { display:flex;justify-content:space-between;align-items:center;gap:15px;margin:20px 0 12px; }
-.runner-choices { display:flex;gap:9px; }
+.runner-choices { display:flex;flex-wrap:wrap;gap:9px; }
 .runner-choice { display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border:2px solid transparent;border-radius:14px;background:#f1ece3;font-weight:900; }
 .runner-choice.active { border-color:var(--orange);background:#fff0e7; }
 .runner-choice img { width:46px;height:46px;border-radius:11px;object-fit:cover; }
