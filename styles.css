@@ -164,6 +164,9 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .mode-button { padding: 10px 13px; border: 2px solid #e8dfd2; border-radius: 12px; background: white; color: var(--ink); font-weight: 800; }
 .mode-button.active { border-color: var(--orange); color: var(--orange-dark); background: #fff3ed; }
 .word-display { margin: 60px 0 35px; text-align: center; font: 700 clamp(27px, 6vw, 49px) "Fredoka"; letter-spacing: 12px; }
+.hang-hint { display:flex;gap:10px;align-items:flex-start;margin:22px 0 10px;padding:13px 15px;border-radius:15px;background:#eaf6ff;color:#315d78; }
+.hang-hint strong { white-space:nowrap;font-family:"Fredoka"; }
+.hang-hint span { line-height:1.4; }
 .letter-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 .letter-button { width: 42px; height: 42px; border: 0; border-radius: 12px; color: var(--ink); background: #f1ecdf; font-weight: 900; }
 .letter-button:hover { background: #ffe1ce; }
@@ -222,11 +225,14 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .whatsapp-button::before { content: "◉"; margin-right: 8px; }
 .toast { position: fixed; z-index: 10; left: 50%; bottom: 25px; transform: translate(-50%, 120px); padding: 13px 21px; border-radius: 99px; color: white; background: var(--ink); font-weight: 800; box-shadow: var(--shadow); transition: .25s ease; }
 .toast.show { transform: translate(-50%, 0); }
-.game-level-bar { display:flex;align-items:center;gap:12px;margin:-10px 0 23px;padding:10px 13px;border:1px solid #ebe2d5;border-radius:15px;background:#fffaf1; }
-.game-level-bar div:first-child { display:flex;align-items:baseline;gap:7px; }
+.game-level-bar { display:flex;align-items:center;gap:10px;margin:-10px 0 23px;padding:10px 13px;border:1px solid #ebe2d5;border-radius:15px;background:#fffaf1; }
 .game-level-bar small { color:var(--muted);font-size:10px;font-weight:900;letter-spacing:1px; }
-.game-level-bar strong { font:700 17px "Fredoka"; }
 .game-level-bar>span { padding:5px 9px;border-radius:99px;color:#755cad;background:#ece5ff;font-size:11px;font-weight:900; }
+.level-select-wrap { display:flex;align-items:center;gap:6px;margin:0; }
+.level-select-wrap select { padding:6px 25px 6px 8px;border:1px solid #ded4c5;border-radius:9px;color:var(--ink);background:white;font-weight:900; }
+.level-nav-button { min-height:34px;padding:0 11px;border:0;border-radius:10px;color:var(--ink);background:#e9e3d8;font-weight:900; }
+.level-nav-button:disabled { opacity:.35;cursor:default; }
+.level-next-button { color:white;background:var(--orange); }
 .level-dots { display:flex;gap:4px;margin-left:auto; }
 .level-dots i { width:8px;height:8px;border-radius:50%;background:#ded8cd; }
 .level-dots i.reached { background:var(--orange); }
@@ -299,4 +305,7 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
   .memory-grid { gap:7px; }
   .code-row { grid-template-columns:22px repeat(4,28px) 1fr;gap:4px;padding:6px; }
   .code-row span { width:28px;height:28px; }
+  .game-level-bar { flex-wrap:wrap; }
+  .level-dots { display:none; }
+  .level-next-button { margin-left:auto; }
 }

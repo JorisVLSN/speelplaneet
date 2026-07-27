@@ -21,6 +21,7 @@ const state = {
   roomListener: null,
   sessionId: localStorage.getItem("speelplaneet-session") || crypto.randomUUID(),
   inviteHandled: false,
+  selectedLevels: {},
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
 state.progress.levels ||= {};
@@ -42,8 +43,13 @@ function saveProgress() {
   localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
 }
 
-function gameLevel(gameId = state.activeGame) {
+function unlockedLevel(gameId = state.activeGame) {
   return Math.min(100, Math.max(1, state.progress.levels[gameId] || 1));
+}
+
+function gameLevel(gameId = state.activeGame) {
+  const unlocked = unlockedLevel(gameId);
+  return Math.min(unlocked, Math.max(1, state.selectedLevels[gameId] || unlocked));
 }
 
 function difficultyBand(level) {
@@ -58,11 +64,29 @@ function addLevelBar(gameId) {
   const panel = stage.querySelector(".game-panel");
   if (!panel) return;
   const level = gameLevel(gameId);
+  const unlocked = unlockedLevel(gameId);
+  panel.querySelector(".game-level-bar")?.remove();
   panel.insertAdjacentHTML("afterbegin", `<div class="game-level-bar">
-    <div><small>NIVEAU</small><strong>${level} / 100</strong></div>
+    <button class="level-nav-button" data-level-prev aria-label="Vorig niveau" ${level <= 1 ? "disabled" : ""}>←</button>
+    <label class="level-select-wrap"><small>NIVEAU</small>
+      <select data-level-select aria-label="Kies niveau">${Array.from({length:unlocked},(_,index)=>`<option value="${index+1}" ${index+1===level?"selected":""}>${index+1} / 100</option>`).join("")}</select>
+    </label>
     <span>${difficultyBand(level)}</span>
     <div class="level-dots">${[20,40,60,80,100].map(mark => `<i class="${level >= mark ? "reached" : ""}"></i>`).join("")}</div>
+    <button class="level-nav-button level-next-button" data-level-next ${level >= unlocked ? "disabled" : ""}>Volgende →</button>
   </div>`);
+  panel.querySelector("[data-level-prev]").addEventListener("click", () => {
+    state.selectedLevels[gameId] = Math.max(1, gameLevel(gameId) - 1);
+    openGame(gameId);
+  });
+  panel.querySelector("[data-level-next]").addEventListener("click", () => {
+    state.selectedLevels[gameId] = Math.min(unlockedLevel(gameId), gameLevel(gameId) + 1);
+    openGame(gameId);
+  });
+  panel.querySelector("[data-level-select]").addEventListener("change", event => {
+    state.selectedLevels[gameId] = Number(event.target.value);
+    openGame(gameId);
+  });
 }
 
 function toast(message) {
@@ -232,10 +256,15 @@ function completeGame(gameId, message) {
   state.progress.stars += 1;
   state.progress.completed.push(gameId);
   state.progress.gameWins[gameId] = (state.progress.gameWins[gameId] || 0) + 1;
-  const previousLevel = gameLevel(gameId);
-  state.progress.levels[gameId] = Math.min(100, previousLevel + 1);
+  const completedLevel = gameLevel(gameId);
+  const previouslyUnlocked = unlockedLevel(gameId);
+  state.selectedLevels[gameId] = completedLevel;
+  if (completedLevel >= previouslyUnlocked) state.progress.levels[gameId] = Math.min(100, previouslyUnlocked + 1);
   saveProgress();
-  toast(previousLevel < 100 ? `${message} ⭐ Niveau ${previousLevel + 1} vrijgespeeld!` : `${message} ⭐ Niveau 100 voltooid!`);
+  addLevelBar(gameId);
+  toast(completedLevel < 100 && completedLevel >= previouslyUnlocked
+    ? `${message} ⭐ Niveau ${completedLevel + 1} vrijgespeeld — tik op Volgende!`
+    : `${message} ⭐ Goed gespeeld!`);
 }
 
 function openGame(id) {
@@ -307,16 +336,42 @@ function wireMultiplayer(gameType, getGameState, applyGameState) {
 
 function renderHangman() {
   const level = gameLevel("galgje");
-  const words = ["MAAN","STER","ROBOT","KASTEEL","DOLFIJN","VLINDER","PLANEET","REGENBOOG","PANNENKOEK","VERREKIJKER","RUIMTESCHIP","SCHATKAART","ONTDEKKINGSREIZIGER"];
+  const words = [
+    { word:"MAAN", hint:"Je ziet haar vaak ’s nachts aan de hemel." },
+    { word:"STER", hint:"Een klein lichtpuntje hoog in de lucht." },
+    { word:"ROBOT", hint:"Een machine die kan bewegen en opdrachten uitvoeren." },
+    { word:"KASTEEL", hint:"Een groot gebouw waar vroeger koningen woonden." },
+    { word:"DOLFIJN", hint:"Een slim zeedier dat graag uit het water springt." },
+    { word:"VLINDER", hint:"Begint als rups en krijgt later mooie vleugels." },
+    { word:"PLANEET", hint:"Een grote bol die rond een ster draait." },
+    { word:"REGENBOOG", hint:"Verschijnt soms als de zon door regendruppels schijnt." },
+    { word:"PANNENKOEK", hint:"Een ronde lekkernij uit de koekenpan." },
+    { word:"VERREKIJKER", hint:"Hiermee kun je iets ver weg dichterbij bekijken." },
+    { word:"RUIMTESCHIP", hint:"Vervoert astronauten buiten de aarde." },
+    { word:"SCHATKAART", hint:"Laat zien waar een verborgen buit kan liggen." },
+    { word:"ONTDEKKINGSREIZIGER", hint:"Iemand die op pad gaat om nieuwe plekken te vinden." }
+  ];
+  const meters = [
+    { name:"Raketbrandstof", full:"●", empty:"○", intro:"Raad het woord voordat de raket vertrekt." },
+    { name:"Ruimteschild", full:"◆", empty:"◇", intro:"Vind het woord en houd het ruimteschild sterk." },
+    { name:"Sterrenkracht", full:"★", empty:"☆", intro:"Verzamel genoeg sterrenkracht om het woord te vinden." },
+    { name:"Duiklucht", full:"●", empty:"○", intro:"Los het woord op voordat de duiklucht op is." },
+    { name:"Toverkracht", full:"✦", empty:"·", intro:"Gebruik je letters voordat de toverkracht verdwijnt." },
+    { name:"Zaklamplicht", full:"■", empty:"□", intro:"Vind het woord zolang je zaklamp nog schijnt." }
+  ];
   const poolSize = Math.min(words.length, 4 + Math.floor(level / 9));
-  let word = words[Math.floor(Math.random() * poolSize)];
+  const chosen = words[Math.floor(Math.random() * poolSize)];
+  let word = chosen.word;
+  let wordHint = chosen.hint;
+  const meter = meters[(level - 1) % meters.length];
   const maxMistakes = Math.max(4, 8 - Math.floor((level - 1) / 25));
   const guessed = new Set();
   let mistakes = 0;
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
-      <p class="eyebrow">WOORDSPEL</p><h2>🔤 Galgje</h2><p class="game-subtitle">Raad het geheime woord voordat de raket vertrekt.</p>
-      <div class="status-box" id="hang-status">Raketbrandstof: <span>${"●".repeat(maxMistakes)}</span></div>
+      <p class="eyebrow">WOORDSPEL</p><h2>🔤 Galgje</h2><p class="game-subtitle">${meter.intro}</p>
+      <div class="hang-hint"><strong>💡 Hint</strong><span id="hang-hint-text">${wordHint}</span></div>
+      <div class="status-box" id="hang-status">${meter.name}: <span>${meter.full.repeat(maxMistakes)}</span></div>
       <div class="word-display" id="hang-word"></div>
       <div class="letter-grid" id="letters"></div>
     </div>
@@ -324,7 +379,7 @@ function renderHangman() {
   </div>`;
   const draw = () => {
     $("#hang-word").textContent = [...word].map(letter => guessed.has(letter) ? letter : "_").join(" ");
-    $("#hang-status").innerHTML = `Raketbrandstof: <span>${"●".repeat(maxMistakes - mistakes)}${"○".repeat(mistakes)}</span>`;
+    $("#hang-status").innerHTML = `${meter.name}: <span>${meter.full.repeat(maxMistakes - mistakes)}${meter.empty.repeat(mistakes)}</span>`;
     const won = [...word].every(letter => guessed.has(letter));
     if (won) {
       $("#hang-status").textContent = "Geweldig! Je hebt het woord gevonden.";
@@ -339,6 +394,8 @@ function renderHangman() {
   const applyHangmanState = remote => {
     if (!remote || remote.kind !== "galgje") return;
     word = remote.word;
+    wordHint = remote.hint || wordHint;
+    $("#hang-hint-text").textContent = wordHint;
     guessed.clear();
     (remote.guessed || []).forEach(letter => guessed.add(letter));
     mistakes = remote.mistakes || 0;
@@ -350,10 +407,10 @@ function renderHangman() {
     guessed.add(button.textContent);
     if (!word.includes(button.textContent)) mistakes++;
     draw();
-    await syncGameState({ kind: "galgje", word, guessed: [...guessed], mistakes });
+    await syncGameState({ kind: "galgje", word, hint: wordHint, guessed: [...guessed], mistakes });
   }));
   draw();
-  wireMultiplayer("galgje", () => ({ kind: "galgje", word, guessed: [...guessed], mistakes }), applyHangmanState);
+  wireMultiplayer("galgje", () => ({ kind: "galgje", word, hint: wordHint, guessed: [...guessed], mistakes }), applyHangmanState);
 }
 
 function renderSudoku() {
