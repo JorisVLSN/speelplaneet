@@ -281,7 +281,7 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .planet-a { width:90px;height:90px;right:15%;top:35px;background:#ff8450;box-shadow:inset -15px -10px #d85f68; }
 .planet-b { width:45px;height:45px;right:44%;top:65px;background:#58b5e8;box-shadow:inset -8px -5px #477bc1; }
 .runner-ground { position:absolute;left:0;right:0;bottom:28px;height:5px;background:#f7d56b;box-shadow:0 7px 0 rgba(36,48,74,.28); }
-.runner-character { position:absolute;z-index:3;left:42px;bottom:32px;width:118px;height:118px;object-fit:cover;border-radius:24px;box-shadow:0 7px 0 rgba(36,48,74,.25);transition:height .12s,width .12s; }
+.runner-character { position:absolute;z-index:3;left:42px;bottom:32px;width:118px;height:118px;object-fit:contain;transition:height .12s,width .12s; }
 .runner-character.ducking { width:108px;height:70px;object-position:center 35%; }
 .runner-obstacle { position:absolute;z-index:2;left:0;display:grid;place-items:center;will-change:transform; }
 .obstacle-robot { bottom:32px;width:62px;height:67px;font-size:52px; }

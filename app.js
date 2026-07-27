@@ -741,7 +741,7 @@ function renderSpaceRunner() {
   const level = gameLevel("ruimterunner");
   const random = levelRng("ruimterunner", level);
   const target = Math.min(35, 8 + Math.floor((level - 1) / 4));
-  const baseSpeed = 4.2 + level * .026;
+  const startSpeed = 2.1 + level * .006;
   let character = localStorage.getItem("speelplaneet-runner") || "ellie";
   let running = false, jumping = false, ducking = false, y = 0, velocity = 0;
   let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
@@ -752,8 +752,8 @@ function renderSpaceRunner() {
     <p class="game-subtitle">Spring over ruimterobots en buk onder vliegende ufo’s. Dit spel blijft ook zonder internet werken.</p>
     <div class="runner-toolbar">
       <div class="runner-choices">
-        <button class="runner-choice ${character === "ellie" ? "active" : ""}" data-runner-choice="ellie"><img src="assets/ellie-runner.png" alt="" /><span>Ellie</span></button>
-        <button class="runner-choice ${character === "mila" ? "active" : ""}" data-runner-choice="mila"><img src="assets/mila-runner.png" alt="" /><span>Mila</span></button>
+        <button class="runner-choice ${character === "ellie" ? "active" : ""}" data-runner-choice="ellie"><img src="assets/ellie-runner-transparent.png" alt="" /><span>Ellie</span></button>
+        <button class="runner-choice ${character === "mila" ? "active" : ""}" data-runner-choice="mila"><img src="assets/mila-runner-transparent.png" alt="" /><span>Mila</span></button>
       </div>
       <div class="runner-score"><small>MISSIE</small><strong><span id="runner-score">0</span> / ${target}</strong></div>
     </div>
@@ -761,7 +761,7 @@ function renderSpaceRunner() {
     <div class="runner-world" id="runner-world" tabindex="0" aria-label="Ruimterunner speelveld">
       <div class="space-stars"></div><div class="space-planet planet-a"></div><div class="space-planet planet-b"></div>
       <div class="runner-ground"></div>
-      <img class="runner-character" id="runner-character" src="assets/${character}-runner.png" alt="${character === "ellie" ? "Ellie" : "Mila"} rent door de ruimte" />
+      <img class="runner-character" id="runner-character" src="assets/${character}-runner-transparent.png" alt="${character === "ellie" ? "Ellie" : "Mila"} rent door de ruimte" />
     </div>
     <div class="runner-controls">
       <button class="runner-action jump-action" id="runner-jump">↑ Spring</button>
@@ -779,7 +779,7 @@ function renderSpaceRunner() {
     if (running) return;
     character = name;
     localStorage.setItem("speelplaneet-runner", name);
-    runner.src = `assets/${name}-runner.png`;
+    runner.src = `assets/${name}-runner-transparent.png`;
     runner.alt = `${name === "ellie" ? "Ellie" : "Mila"} rent door de ruimte`;
     document.querySelectorAll("[data-runner-choice]").forEach(button => button.classList.toggle("active", button.dataset.runnerChoice === name));
   };
@@ -828,13 +828,14 @@ function renderSpaceRunner() {
     if (!running) return;
     const delta = Math.min(32, time - lastTime || 16.7);
     lastTime = time;
-    const speed = baseSpeed * (delta / 16.7);
+    const gradualAcceleration = Math.min(2.9, passed * .085 + distance / 48000);
+    const speed = (startSpeed + gradualAcceleration) * (delta / 16.7);
     distance += delta;
     nextSpawn -= delta;
     if (nextSpawn <= 0) {
       spawnObstacle();
-      const difficultyGap = Math.max(720, 1450 - level * 5.5);
-      nextSpawn = difficultyGap + random() * 650;
+      const difficultyGap = Math.max(1050, 1950 - level * 3.2 - passed * 10);
+      nextSpawn = difficultyGap + random() * 800;
     }
     if (jumping) {
       y += velocity * (delta / 16.7);
@@ -861,7 +862,7 @@ function renderSpaceRunner() {
   const start = () => {
     obstacles.splice(0).forEach(obstacle => obstacle.element.remove());
     running = true; jumping = false; ducking = false; y = 0; velocity = 0; passed = 0; distance = 0;
-    nextSpawn = 850 + random() * 500; runner.style.transform = ""; runner.classList.remove("ducking");
+    nextSpawn = 1450 + random() * 650; runner.style.transform = ""; runner.classList.remove("ducking");
     $("#runner-score").textContent = "0"; $("#runner-start").classList.add("hidden");
     status.textContent = "De missie is gestart — let goed op!";
     lastTime = performance.now(); world.focus(); frame = requestAnimationFrame(loop);

@@ -1,12 +1,12 @@
-const CACHE_NAME = "speelplaneet-offline-v1";
+const CACHE_NAME = "speelplaneet-offline-v3";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
   "/app.js",
   "/assets/ellie-en-mila-speelplaneet.png",
-  "/assets/ellie-runner.png",
-  "/assets/mila-runner.png"
+  "/assets/ellie-runner-transparent.png",
+  "/assets/mila-runner-transparent.png"
 ];
 
 self.addEventListener("install", event => {
