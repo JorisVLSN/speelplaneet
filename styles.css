@@ -222,6 +222,44 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .whatsapp-button::before { content: "◉"; margin-right: 8px; }
 .toast { position: fixed; z-index: 10; left: 50%; bottom: 25px; transform: translate(-50%, 120px); padding: 13px 21px; border-radius: 99px; color: white; background: var(--ink); font-weight: 800; box-shadow: var(--shadow); transition: .25s ease; }
 .toast.show { transform: translate(-50%, 0); }
+.game-level-bar { display:flex;align-items:center;gap:12px;margin:-10px 0 23px;padding:10px 13px;border:1px solid #ebe2d5;border-radius:15px;background:#fffaf1; }
+.game-level-bar div:first-child { display:flex;align-items:baseline;gap:7px; }
+.game-level-bar small { color:var(--muted);font-size:10px;font-weight:900;letter-spacing:1px; }
+.game-level-bar strong { font:700 17px "Fredoka"; }
+.game-level-bar>span { padding:5px 9px;border-radius:99px;color:#755cad;background:#ece5ff;font-size:11px;font-weight:900; }
+.level-dots { display:flex;gap:4px;margin-left:auto; }
+.level-dots i { width:8px;height:8px;border-radius:50%;background:#ded8cd; }
+.level-dots i.reached { background:var(--orange); }
+.memory-grid { display: grid; grid-template-columns: repeat(var(--memory-columns,4), 1fr); gap: 11px; width: min(600px,100%); margin: 30px auto; }
+.memory-card { aspect-ratio: 1; border: 0; border-radius: 17px; color: white; background: var(--purple); font-size: clamp(26px,5vw,43px); box-shadow: 0 6px 0 #725dbd; }
+.memory-card.open { color: var(--ink); background: #fff4c5; transform: translateY(4px); box-shadow: 0 2px 0 #decf95; }
+.memory-card.matched { color: var(--ink); background: #dff3e8; box-shadow: 0 2px 0 #9bc9aa; }
+.ttt-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; width: min(390px,100%); margin: 35px auto; }
+.ttt-cell { aspect-ratio: 1; border: 0; border-radius: 17px; color: var(--orange); background: #fff0e7; font: 700 clamp(40px,8vw,70px) "Fredoka"; }
+.ttt-cell.mark-o { color: var(--blue); background: #e5f5fd; }
+.connect-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 6px; width: min(540px,100%); margin: 30px auto; padding: 13px; border-radius: 20px; background: #397eb4; }
+.connect-cell { aspect-ratio: 1; padding: 5px; border: 0; border-radius: 50%; background: #cce9f8; }
+.connect-cell span { display: block; width: 100%; height: 100%; border-radius: 50%; box-shadow: inset 0 3px 5px rgba(0,0,0,.12); }
+.connect-cell .token-red { background: #ff6d52; }
+.connect-cell .token-yellow { background: #ffd84e; }
+.code-history { display: grid; gap: 7px; width: min(460px,100%); margin: 25px auto 12px; }
+.code-row { display: grid; grid-template-columns: 28px repeat(4,35px) 1fr; align-items: center; gap: 7px; padding: 7px 11px; border-radius: 12px; background: #f4f1eb; }
+.code-row span,.current-code span,.color-dot { width: 35px; height: 35px; border: 0; border-radius: 50%; }
+.code-row small { text-align: right; font-weight: 800; }
+.current-code { display: flex; justify-content: center; gap: 9px; min-height: 45px; margin: 16px; }
+.current-code span { display:grid;place-items:center;background:#edf0f3;font-weight:900; }
+.color-picker { display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:15px; }
+.color-dot { box-shadow:0 4px 0 rgba(0,0,0,.17); }
+.color-coral { background:#ff8450 !important; }.color-blue { background:#58b5e8 !important; }.color-yellow { background:#ffd65a !important; }
+.color-purple { background:#8f78df !important; }.color-green { background:#63bf8c !important; }.color-navy { background:#24304a !important; }
+.math-panel { text-align:center; }.math-panel>p { text-align:left; }
+.math-question { margin:55px 0 30px;font:700 clamp(48px,10vw,85px) "Fredoka";color:var(--purple); }
+#math-form { display:grid;grid-template-columns:1fr auto;gap:10px;width:min(390px,100%);margin:auto; }
+#math-form .primary-button { margin:0;padding:0 18px; }
+.simon-panel { text-align:center; }.simon-panel>p { text-align:left; }
+.simon-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:13px;width:min(380px,100%);margin:30px auto; }
+.simon-pad { aspect-ratio:1;border:0;border-radius:28px;opacity:.72;box-shadow:0 8px 0 rgba(36,48,74,.2);transition:.12s; }
+.simon-pad.flash { opacity:1;transform:scale(1.06);filter:brightness(1.28);box-shadow:0 0 30px currentColor; }
 
 @media (max-width: 900px) {
   .login-shell { place-items: end center; padding-bottom: 30px; }
@@ -257,4 +295,8 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
   .daily-card { grid-template-columns: auto 1fr; }
   .daily-progress { display: none; }
   .game-panel { padding: 22px 15px; min-height: 500px; }
+  .connect-grid { gap:3px;padding:7px; }
+  .memory-grid { gap:7px; }
+  .code-row { grid-template-columns:22px repeat(4,28px) 1fr;gap:4px;padding:6px; }
+  .code-row span { width:28px;height:28px; }
 }

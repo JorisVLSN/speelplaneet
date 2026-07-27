@@ -22,3 +22,10 @@ Open `index.html` rechtstreeks in een browser of start een eenvoudige lokale web
 Zeeslag en galgje ondersteunen daarna online kamers met joincodes en gesynchroniseerde spelstanden. Zeeslag gebruikt een klassiek 10×10-bord, een vloot van vijf schepen, een plaatsingsfase en beurtelings schieten. Profielen, pincodes en puzzelvoortgang blijven in deze versie uitsluitend op het eigen apparaat.
 
 Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken de vorm `https://speelplaneet.vercel.app/?game=zeeslag&code=ABC-123` en openen na het aanmelden automatisch het juiste spel en de juiste kamer.
+
+## Spellen
+
+- Zeeslag, Galgje, Vier op een rij en Boter-kaas-en-eieren: solo en online met joincode
+- Mini Sudoku, Woordzoeker, Memory, Kleurcode, Rekensprint en Sterrenreeks: solo met sterren en levels
+
+Ieder spel heeft 100 oplopende niveaus. Na het voltooien van een niveau wordt automatisch het volgende niveau vrijgespeeld. De moeilijkheid groeit via langere woorden en reeksen, minder hints, grotere speelvelden of codes, moeilijkere sommen en sterkere computertegenstanders.

@@ -1,8 +1,14 @@
 const games = [
-  { id: "zeeslag", title: "Zeeslag", icon: "🚢", color: "blue", description: "Vind de verstopte schepen!", modes: "Solo · Samen" },
-  { id: "galgje", title: "Galgje", icon: "🔤", color: "orange", description: "Raad het woord, letter voor letter.", modes: "Solo · Samen" },
-  { id: "sudoku", title: "Mini Sudoku", icon: "🧩", color: "purple", description: "Vul ieder vakje slim in.", modes: "Levels 1–10" },
-  { id: "woordzoeker", title: "Woordzoeker", icon: "🔎", color: "green", description: "Speur alle woorden op.", modes: "Levels 1–10" },
+  { id: "zeeslag", title: "Zeeslag", icon: "🚢", color: "blue", description: "Vind de verstopte schepen!", modes: "Solo · Samen · 100 levels" },
+  { id: "galgje", title: "Galgje", icon: "🔤", color: "orange", description: "Raad het woord, letter voor letter.", modes: "Solo · Samen · 100 levels" },
+  { id: "sudoku", title: "Mini Sudoku", icon: "🧩", color: "purple", description: "Vul ieder vakje slim in.", modes: "100 levels" },
+  { id: "woordzoeker", title: "Woordzoeker", icon: "🔎", color: "green", description: "Speur alle woorden op.", modes: "100 levels" },
+  { id: "memory", title: "Memory", icon: "🃏", color: "purple", description: "Vind alle gelijke ruimteparen.", modes: "100 levels" },
+  { id: "vieropeenrij", title: "Vier op een rij", icon: "🔴", color: "blue", description: "Maak als eerste een rij van vier.", modes: "Solo · Samen · 100 levels" },
+  { id: "boterkaaseieren", title: "Boter-kaas-en-eieren", icon: "❌", color: "orange", description: "Drie op een rij wint!", modes: "Solo · Samen · 100 levels" },
+  { id: "mastermind", title: "Kleurcode", icon: "🎨", color: "green", description: "Kraak de geheime kleurcode.", modes: "100 levels" },
+  { id: "rekensprint", title: "Rekensprint", icon: "➕", color: "orange", description: "Los snelle sommen op.", modes: "100 levels" },
+  { id: "simon", title: "Sterrenreeks", icon: "✨", color: "purple", description: "Onthoud de kleurenreeks.", modes: "100 levels" },
 ];
 
 const state = {
@@ -17,6 +23,7 @@ const state = {
   inviteHandled: false,
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
+state.progress.levels ||= {};
 
 const inviteParams = new URLSearchParams(window.location.search);
 const pendingInvite = {
@@ -33,6 +40,29 @@ const stage = $("#game-stage");
 
 function saveProgress() {
   localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
+}
+
+function gameLevel(gameId = state.activeGame) {
+  return Math.min(100, Math.max(1, state.progress.levels[gameId] || 1));
+}
+
+function difficultyBand(level) {
+  if (level <= 20) return "Ontdekker";
+  if (level <= 40) return "Speurneus";
+  if (level <= 60) return "Avonturier";
+  if (level <= 80) return "Expert";
+  return "Kampioen";
+}
+
+function addLevelBar(gameId) {
+  const panel = stage.querySelector(".game-panel");
+  if (!panel) return;
+  const level = gameLevel(gameId);
+  panel.insertAdjacentHTML("afterbegin", `<div class="game-level-bar">
+    <div><small>NIVEAU</small><strong>${level} / 100</strong></div>
+    <span>${difficultyBand(level)}</span>
+    <div class="level-dots">${[20,40,60,80,100].map(mark => `<i class="${level >= mark ? "reached" : ""}"></i>`).join("")}</div>
+  </div>`);
 }
 
 function toast(message) {
@@ -61,7 +91,7 @@ async function handlePendingInvite() {
     state.inviteHandled ||
     !state.player ||
     !state.supabase ||
-    !["zeeslag", "galgje"].includes(pendingInvite.game) ||
+    !["zeeslag", "galgje", "vieropeenrij", "boterkaaseieren"].includes(pendingInvite.game) ||
     !/^[A-Z]{3}-[0-9]{3}$/i.test(pendingInvite.code || "")
   ) return;
   state.inviteHandled = true;
@@ -202,8 +232,10 @@ function completeGame(gameId, message) {
   state.progress.stars += 1;
   state.progress.completed.push(gameId);
   state.progress.gameWins[gameId] = (state.progress.gameWins[gameId] || 0) + 1;
+  const previousLevel = gameLevel(gameId);
+  state.progress.levels[gameId] = Math.min(100, previousLevel + 1);
   saveProgress();
-  toast(`${message} ⭐ Je verdient een ster!`);
+  toast(previousLevel < 100 ? `${message} ⭐ Niveau ${previousLevel + 1} vrijgespeeld!` : `${message} ⭐ Niveau 100 voltooid!`);
 }
 
 function openGame(id) {
@@ -215,6 +247,13 @@ function openGame(id) {
   if (id === "sudoku") renderSudoku();
   if (id === "woordzoeker") renderWordSearch();
   if (id === "zeeslag") renderBattleship();
+  if (id === "memory") renderMemory();
+  if (id === "vieropeenrij") renderConnectFour();
+  if (id === "boterkaaseieren") renderTicTacToe();
+  if (id === "mastermind") renderMastermind();
+  if (id === "rekensprint") renderMathSprint();
+  if (id === "simon") renderSimon();
+  addLevelBar(id);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -259,21 +298,25 @@ function wireMultiplayer(gameType, getGameState, applyGameState) {
   share.addEventListener("click", () => {
     if (!state.room) return;
     const invitationUrl = `https://speelplaneet.vercel.app/?game=${encodeURIComponent(gameType)}&code=${encodeURIComponent(state.room.join_code)}`;
-    const gameName = gameType === "zeeslag" ? "Zeeslag" : "Galgje";
+    const gameNames = { zeeslag: "Zeeslag", galgje: "Galgje", vieropeenrij: "Vier op een rij", boterkaaseieren: "Boter-kaas-en-eieren" };
+    const gameName = gameNames[gameType] || "een spel";
     const message = `Kom je ${gameName} met mij spelen op Speelplaneet? Open deze link en je komt meteen in mijn spel: ${invitationUrl}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   });
 }
 
 function renderHangman() {
-  const words = ["PLANEET", "DOLFIJN", "REGENBOOG", "KASTEEL", "PANNENKOEK", "VLINDER"];
-  let word = words[Math.floor(Math.random() * words.length)];
+  const level = gameLevel("galgje");
+  const words = ["MAAN","STER","ROBOT","KASTEEL","DOLFIJN","VLINDER","PLANEET","REGENBOOG","PANNENKOEK","VERREKIJKER","RUIMTESCHIP","SCHATKAART","ONTDEKKINGSREIZIGER"];
+  const poolSize = Math.min(words.length, 4 + Math.floor(level / 9));
+  let word = words[Math.floor(Math.random() * poolSize)];
+  const maxMistakes = Math.max(4, 8 - Math.floor((level - 1) / 25));
   const guessed = new Set();
   let mistakes = 0;
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
       <p class="eyebrow">WOORDSPEL</p><h2>🔤 Galgje</h2><p class="game-subtitle">Raad het geheime woord voordat de raket vertrekt.</p>
-      <div class="status-box" id="hang-status">Raketbrandstof: <span>●●●●●●</span></div>
+      <div class="status-box" id="hang-status">Raketbrandstof: <span>${"●".repeat(maxMistakes)}</span></div>
       <div class="word-display" id="hang-word"></div>
       <div class="letter-grid" id="letters"></div>
     </div>
@@ -281,13 +324,13 @@ function renderHangman() {
   </div>`;
   const draw = () => {
     $("#hang-word").textContent = [...word].map(letter => guessed.has(letter) ? letter : "_").join(" ");
-    $("#hang-status").innerHTML = `Raketbrandstof: <span>${"●".repeat(6 - mistakes)}${"○".repeat(mistakes)}</span>`;
+    $("#hang-status").innerHTML = `Raketbrandstof: <span>${"●".repeat(maxMistakes - mistakes)}${"○".repeat(mistakes)}</span>`;
     const won = [...word].every(letter => guessed.has(letter));
     if (won) {
       $("#hang-status").textContent = "Geweldig! Je hebt het woord gevonden.";
       completeGame("galgje", "Galgje opgelost!");
       document.querySelectorAll(".letter-button").forEach(b => b.disabled = true);
-    } else if (mistakes >= 6) {
+    } else if (mistakes >= maxMistakes) {
       $("#hang-status").textContent = `Bijna! Het woord was ${word}. Probeer opnieuw.`;
       document.querySelectorAll(".letter-button").forEach(b => b.disabled = true);
     }
@@ -314,8 +357,11 @@ function renderHangman() {
 }
 
 function renderSudoku() {
-  const puzzle = [1,0,0,4, 0,4,1,0, 0,1,4,0, 4,0,0,1];
+  const level = gameLevel("sudoku");
   const solution = [1,2,3,4, 3,4,1,2, 2,1,4,3, 4,3,2,1];
+  const clueCount = Math.max(4, 10 - Math.floor((level - 1) / 17));
+  const cluePositions = Array.from({length:16},(_,i)=>(i*7+level*3)%16).slice(0,clueCount);
+  const puzzle = solution.map((value,index)=>cluePositions.includes(index)?value:0);
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
       <p class="eyebrow">LEVEL 1 · LOGICA</p><h2>🧩 Mini Sudoku</h2><p class="game-subtitle">Zorg dat 1, 2, 3 en 4 één keer in iedere rij en elk blok staan.</p>
@@ -335,8 +381,10 @@ function renderSudoku() {
 }
 
 function renderWordSearch() {
+  const level = gameLevel("woordzoeker");
   const rows = ["STERABCD","QZEEFGHI","JKLMNOPQ","RAKETUVW","XYZAARDE","BCDEFGHI","MAANJKLM","NOPQRSTU"];
-  const words = ["STER", "ZEE", "RAKET", "AARDE", "MAAN"];
+  const allWords = ["STER", "ZEE", "RAKET", "AARDE", "MAAN"];
+  const words = allWords.slice(0, Math.min(5, 3 + Math.floor((level - 1) / 34)));
   const found = new Set();
   let selected = [];
   stage.innerHTML = `<div class="game-layout">
@@ -371,7 +419,209 @@ function renderWordSearch() {
   }));
 }
 
+function renderMemory() {
+  const level = gameLevel("memory");
+  const allSymbols = ["🚀", "🪐", "⭐", "👽", "🌙", "🛰️", "☄️", "🌍", "🔭", "🛸", "🌌", "👩‍🚀"];
+  const pairCount = Math.min(12, 4 + Math.floor((level - 1) / 12));
+  const symbols = allSymbols.slice(0, pairCount);
+  const cards = [...symbols, ...symbols].sort(() => Math.random() - .5);
+  let open = [], found = new Set(), moves = 0, locked = false;
+  stage.innerHTML = `<div class="game-layout">
+    <div class="game-panel">
+      <p class="eyebrow">GEHEUGENSPEL · LEVEL 1</p><h2>🃏 Ruimte-Memory</h2>
+      <p class="game-subtitle">Draai steeds twee kaartjes om en vind alle zes paren.</p>
+      <div class="status-box" id="memory-status">Zetten: 0 · Paren: 0 / ${pairCount}</div>
+      <div class="memory-grid" style="--memory-columns:${pairCount > 8 ? 6 : 4}">${cards.map((_, i) => `<button class="memory-card" data-card="${i}" aria-label="Gesloten kaart">✦</button>`).join("")}</div>
+    </div>
+    ${sidePanel("Memory-tip", "Probeer niet alleen het plaatje, maar ook de plek van ieder kaartje te onthouden.", false)}
+  </div>`;
+  document.querySelectorAll("[data-card]").forEach(card => card.addEventListener("click", () => {
+    const index = Number(card.dataset.card);
+    if (locked || open.includes(index) || found.has(index)) return;
+    open.push(index); card.textContent = cards[index]; card.classList.add("open");
+    if (open.length === 2) {
+      moves++;
+      const [a, b] = open;
+      if (cards[a] === cards[b]) {
+        found.add(a); found.add(b); open = [];
+        document.querySelectorAll("[data-card]")[a].classList.add("matched");
+        document.querySelectorAll("[data-card]")[b].classList.add("matched");
+        if (found.size === cards.length) completeGame("memory", `Memory klaar in ${moves} zetten!`);
+      } else {
+        locked = true;
+        setTimeout(() => {
+          [a, b].forEach(i => { const c = document.querySelector(`[data-card="${i}"]`); c.textContent = "✦"; c.classList.remove("open"); });
+          open = []; locked = false;
+        }, 750);
+      }
+      $("#memory-status").textContent = `Zetten: ${moves} · Paren: ${found.size / 2} / ${pairCount}`;
+    }
+  }));
+}
+
+function renderTicTacToe() {
+  const level = gameLevel("boterkaaseieren");
+  let game = { kind: "boterkaaseieren", board: Array(9).fill(null), turn: "host", winner: null };
+  const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
+  const mark = playerRole => playerRole === "host" ? "X" : "O";
+  const winner = board => {
+    const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+    const line = lines.find(([a,b,c]) => board[a] && board[a] === board[b] && board[a] === board[c]);
+    return line ? board[line[0]] : board.every(Boolean) ? "draw" : null;
+  };
+  stage.innerHTML = `<div class="game-layout"><div class="game-panel">
+    <p class="eyebrow">KLASSIEKER</p><h2>❌ Boter-kaas-en-eieren</h2>
+    <p class="game-subtitle">Maak horizontaal, verticaal of schuin drie dezelfde tekens op een rij.</p>
+    <div class="status-box" id="ttt-status">Jij begint met X.</div>
+    <div class="ttt-grid">${Array.from({length:9},(_,i)=>`<button class="ttt-cell" data-ttt="${i}"></button>`).join("")}</div>
+  </div>${sidePanel("Speel met z'n tweeën", "Deel een kamer via WhatsApp of speel meteen tegen de computer.")}</div>`;
+  const draw = () => {
+    document.querySelectorAll("[data-ttt]").forEach(cell => {
+      const i = Number(cell.dataset.ttt);
+      cell.textContent = game.board[i] || "";
+      cell.classList.toggle("mark-o", game.board[i] === "O");
+      cell.disabled = Boolean(game.board[i]) || Boolean(game.winner) || game.turn !== role();
+    });
+    $("#ttt-status").textContent = game.winner === "draw" ? "Gelijkspel — knap gespeeld!"
+      : game.winner ? (game.winner === mark(role()) ? "🏆 Jij hebt gewonnen!" : "De tegenstander wint deze ronde.")
+      : game.turn === role() ? `Jij bent aan de beurt met ${mark(role())}.` : "Even wachten op de tegenstander…";
+  };
+  const apply = remote => { if (remote?.kind === "boterkaaseieren") { game = remote; draw(); } };
+  document.querySelectorAll("[data-ttt]").forEach(cell => cell.addEventListener("click", async () => {
+    const i = Number(cell.dataset.ttt);
+    if (cell.disabled) return;
+    game.board[i] = mark(role());
+    game.winner = winner(game.board);
+    if (!game.winner) game.turn = role() === "host" ? "guest" : "host";
+    if (!state.room && !game.winner) {
+      const free = game.board.map((v,i) => v ? null : i).filter(i => i !== null);
+      const tactical = symbol => free.find(i => { const test=[...game.board];test[i]=symbol;return winner(test)===symbol; });
+      const smart = Math.random() < (.2 + level * .008);
+      const choice = smart ? (tactical("O") ?? tactical("X") ?? (free.includes(4) ? 4 : free[Math.floor(Math.random()*free.length)])) : free[Math.floor(Math.random()*free.length)];
+      game.board[choice] = "O"; game.winner = winner(game.board); game.turn = "host";
+    }
+    if (game.winner === mark(role())) completeGame("boterkaaseieren", "Drie op een rij!");
+    draw(); await syncGameState(game);
+  }));
+  draw(); wireMultiplayer("boterkaaseieren", () => game, apply);
+}
+
+function renderConnectFour() {
+  const level = gameLevel("vieropeenrij");
+  let game = { kind: "vieropeenrij", board: Array(42).fill(null), turn: "host", winner: null };
+  const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
+  const token = r => r === "host" ? "red" : "yellow";
+  const drop = (board, column, color) => {
+    for (let row = 5; row >= 0; row--) { const i = row * 7 + column; if (!board[i]) { board[i] = color; return i; } }
+    return -1;
+  };
+  const hasFour = (board, color) => {
+    for (let r=0;r<6;r++) for(let c=0;c<7;c++) for(const [dr,dc] of [[0,1],[1,0],[1,1],[1,-1]])
+      if ([0,1,2,3].every(n => { const rr=r+dr*n, cc=c+dc*n; return rr>=0&&rr<6&&cc>=0&&cc<7&&board[rr*7+cc]===color; })) return true;
+    return false;
+  };
+  stage.innerHTML = `<div class="game-layout"><div class="game-panel">
+    <p class="eyebrow">VIER OP EEN RIJ</p><h2>🔴 Sterrenstapelaar</h2>
+    <p class="game-subtitle">Laat je fiches vallen en maak als eerste een rij van vier.</p>
+    <div class="status-box" id="four-status">Jij begint met rood.</div>
+    <div class="connect-grid">${Array.from({length:42},(_,i)=>`<button class="connect-cell" data-column="${i%7}" aria-label="Kolom ${i%7+1}"><span></span></button>`).join("")}</div>
+  </div>${sidePanel("Speel samen", "Maak een kamer en deel de uitnodiging. Iedere speler krijgt een eigen kleur.")}</div>`;
+  const draw = () => {
+    document.querySelectorAll(".connect-cell").forEach((cell,i) => {
+      cell.querySelector("span").className = game.board[i] ? `token-${game.board[i]}` : "";
+      cell.disabled = Boolean(game.winner) || game.turn !== role() || Boolean(game.board[Number(cell.dataset.column)]);
+    });
+    $("#four-status").textContent = game.winner === "draw" ? "Het bord is vol: gelijkspel!"
+      : game.winner ? (game.winner === token(role()) ? "🏆 Vier op een rij — jij wint!" : "De tegenstander heeft vier op een rij.")
+      : game.turn === role() ? `Jouw beurt met ${token(role()) === "red" ? "rood" : "geel"}.` : "De tegenstander denkt na…";
+  };
+  const apply = remote => { if (remote?.kind === "vieropeenrij") { game = remote; draw(); } };
+  document.querySelectorAll("[data-column]").forEach(cell => cell.addEventListener("click", async () => {
+    if (cell.disabled) return;
+    const color = token(role());
+    drop(game.board, Number(cell.dataset.column), color);
+    game.winner = hasFour(game.board, color) ? color : game.board.every(Boolean) ? "draw" : null;
+    if (!game.winner) game.turn = role() === "host" ? "guest" : "host";
+    if (!state.room && !game.winner) {
+      const valid = [0,1,2,3,4,5,6].filter(c => !game.board[c]);
+      const winning = valid.find(c=>{const test=[...game.board];drop(test,c,"yellow");return hasFour(test,"yellow");});
+      const blocking = valid.find(c=>{const test=[...game.board];drop(test,c,"red");return hasFour(test,"red");});
+      const smart = Math.random() < (.15 + level * .0085);
+      const preferred = valid.slice().sort((a,b)=>Math.abs(a-3)-Math.abs(b-3));
+      const col = smart ? (winning ?? blocking ?? preferred[0]) : valid[Math.floor(Math.random()*valid.length)];
+      drop(game.board, col, "yellow");
+      game.winner = hasFour(game.board, "yellow") ? "yellow" : game.board.every(Boolean) ? "draw" : null;
+      game.turn = "host";
+    }
+    if (game.winner === color) completeGame("vieropeenrij", "Vier op een rij!");
+    draw(); await syncGameState(game);
+  }));
+  draw(); wireMultiplayer("vieropeenrij", () => game, apply);
+}
+
+function renderMastermind() {
+  const level = gameLevel("mastermind");
+  const colors = ["coral","blue","yellow","purple","green","navy"];
+  const codeLength = Math.min(6, 3 + Math.floor((level - 1) / 25));
+  const maxTurns = Math.max(6, 10 - Math.floor((level - 1) / 25));
+  const secret = Array.from({length:codeLength}, () => colors[Math.floor(Math.random()*colors.length)]);
+  let guess = [], turn = 1;
+  stage.innerHTML = `<div class="game-layout"><div class="game-panel">
+    <p class="eyebrow">LOGICAPUZZEL</p><h2>🎨 Kraak de kleurcode</h2>
+    <p class="game-subtitle">Kies ${codeLength} kleuren. Een gouden stip is goed én op de juiste plek; wit is een goede kleur op een andere plek.</p>
+    <div class="code-history" id="code-history"></div><div class="current-code" id="current-code"></div>
+    <div class="color-picker">${colors.map(c=>`<button class="color-dot color-${c}" data-color="${c}" aria-label="${c}"></button>`).join("")}</div>
+    <button class="primary-button" id="check-code" disabled>Controleer code</button>
+  </div>${sidePanel("Kleurentip", "Gebruik de aanwijzingen van iedere poging om kleuren uit te sluiten.", false)}</div>`;
+  const drawGuess = () => {
+    $("#current-code").innerHTML = Array.from({length:codeLength},(_,i)=>`<span class="${guess[i] ? `color-${guess[i]}` : ""}">${guess[i] ? "" : "?"}</span>`).join("");
+    $("#check-code").disabled = guess.length !== codeLength;
+  };
+  document.querySelectorAll("[data-color]").forEach(b=>b.addEventListener("click",()=>{ if(guess.length<codeLength){guess.push(b.dataset.color);drawGuess();} }));
+  $("#current-code").addEventListener("click",()=>{guess.pop();drawGuess();});
+  $("#check-code").addEventListener("click",()=>{
+    const exact = guess.filter((c,i)=>c===secret[i]).length;
+    const remainingSecret = secret.filter((c,i)=>guess[i]!==c), remainingGuess = guess.filter((c,i)=>secret[i]!==c);
+    let near=0; remainingGuess.forEach(c=>{const i=remainingSecret.indexOf(c);if(i>=0){near++;remainingSecret.splice(i,1);}});
+    $("#code-history").insertAdjacentHTML("beforeend",`<div class="code-row"><strong>${turn}</strong>${guess.map(c=>`<span class="color-${c}"></span>`).join("")}<small>🟡 ${exact} · ⚪ ${near}</small></div>`);
+    if(exact===codeLength){completeGame("mastermind","Kleurcode gekraakt!");$("#check-code").disabled=true;document.querySelectorAll("[data-color]").forEach(b=>b.disabled=true);}
+    else if(turn===maxTurns){toast("De code ontsnapte. Probeer een nieuwe ronde!");$("#check-code").disabled=true;}
+    else {turn++;guess=[];drawGuess();}
+  });
+  drawGuess();
+}
+
+function renderMathSprint() {
+  const level=gameLevel("rekensprint"), total=Math.min(20,8+Math.floor(level/8));
+  let question=0, score=0, answer=0;
+  stage.innerHTML=`<div class="game-layout"><div class="game-panel math-panel">
+    <p class="eyebrow">REKENMISSIE</p><h2>➕ Rekensprint</h2><p class="game-subtitle">Los ${total} sommen op. Rustig nadenken mag!</p>
+    <div class="status-box" id="math-status">Som 1 van ${total} · Score: 0</div>
+    <div class="math-question" id="math-question"></div>
+    <form id="math-form"><input id="math-answer" inputmode="numeric" autocomplete="off" aria-label="Antwoord"><button class="primary-button">Controleer</button></form>
+  </div>${sidePanel("Rekentip","Splits een moeilijke som op in twee kleinere stapjes.",false)}</div>`;
+  const next=()=>{const range=10+Math.floor(level*1.8),a=2+Math.floor(Math.random()*range),b=2+Math.floor(Math.random()*range);let op="+";if(level>25&&Math.random()>.55)op="-";if(level>65&&Math.random()>.72)op="×";if(op==="+"){answer=a+b;$("#math-question").textContent=`${a} + ${b} = ?`;}else if(op==="-"){answer=Math.abs(a-b);$("#math-question").textContent=`${Math.max(a,b)} − ${Math.min(a,b)} = ?`;}else{const x=2+Math.floor(Math.random()*Math.min(10,2+level/10)),y=2+Math.floor(Math.random()*10);answer=x*y;$("#math-question").textContent=`${x} × ${y} = ?`;}$("#math-answer").value="";$("#math-answer").focus();};
+  $("#math-form").addEventListener("submit",e=>{e.preventDefault();if(Number($("#math-answer").value)===answer){score++;toast("Goed gerekend!");}else toast(`Bijna! Het antwoord was ${answer}.`);question++;if(question===total){$("#math-question").textContent=`${score} van de ${total} goed!`;$("#math-form").classList.add("hidden");if(score>=Math.ceil(total*.7))completeGame("rekensprint","Rekensprint voltooid!");}else{$("#math-status").textContent=`Som ${question+1} van ${total} · Score: ${score}`;next();}});
+  next();
+}
+
+function renderSimon() {
+  const gameLvl=gameLevel("simon"), target=Math.min(15,4+Math.floor((gameLvl-1)/9));
+  const colors=["coral","blue","yellow","purple"]; let sequence=[],input=[],level=0,accepting=false;
+  stage.innerHTML=`<div class="game-layout"><div class="game-panel simon-panel">
+    <p class="eyebrow">GEHEUGENMISSIE</p><h2>✨ Sterrenreeks</h2><p class="game-subtitle">Bekijk de lichtjes en tik daarna precies dezelfde reeks.</p>
+    <div class="status-box" id="simon-status">Druk op start wanneer je klaar bent.</div>
+    <div class="simon-grid">${colors.map(c=>`<button class="simon-pad color-${c}" data-simon="${c}" aria-label="${c}"></button>`).join("")}</div>
+    <button class="primary-button" id="start-simon">Start de reeks</button>
+  </div>${sidePanel("Onthoudtip","Zeg de kleuren zachtjes in je hoofd terwijl ze oplichten.",false)}</div>`;
+  const flash=async()=>{accepting=false;$("#simon-status").textContent=`Kijk goed… level ${level}`;for(const c of sequence){await new Promise(r=>setTimeout(r,350));const p=document.querySelector(`[data-simon="${c}"]`);p.classList.add("flash");await new Promise(r=>setTimeout(r,420));p.classList.remove("flash");}input=[];accepting=true;$("#simon-status").textContent="Jouw beurt!";};
+  const advance=()=>{level++;sequence.push(colors[Math.floor(Math.random()*colors.length)]);flash();};
+  $("#start-simon").addEventListener("click",()=>{$("#start-simon").classList.add("hidden");advance();});
+  document.querySelectorAll("[data-simon]").forEach(p=>p.addEventListener("click",()=>{if(!accepting)return;input.push(p.dataset.simon);const i=input.length-1;if(input[i]!==sequence[i]){accepting=false;$("#simon-status").textContent=`Oeps! Je haalde reeks ${level}.`;$("#start-simon").textContent="Opnieuw";$("#start-simon").classList.remove("hidden");sequence=[];level=0;}else if(input.length===sequence.length){accepting=false;if(level===target){completeGame("simon",`${target} reeksen onthouden!`);$("#simon-status").textContent=`🏆 Alle ${target} reeksen goed onthouden!`;}else setTimeout(advance,650);}}));
+}
+
 function renderBattleship() {
+  const level = gameLevel("zeeslag");
   const fleet = [5, 4, 3, 3, 2];
   let orientation = "horizontal";
   let selectedShip = 0;
@@ -557,7 +807,16 @@ function renderBattleship() {
       if (!state.room) {
         const computer = battle.players.guest;
         const choices = Array.from({ length: 100 }, (_, index) => index).filter(index => !computer.shots.includes(index));
-        computer.shots.push(choices[Math.floor(Math.random() * choices.length)]);
+        const hostCells = occupied(battle.players.host);
+        const previousHits = computer.shots.filter(index => hostCells.has(index));
+        const nearby = previousHits.flatMap(index => {
+          const row=Math.floor(index/10),col=index%10;
+          return [[row-1,col],[row+1,col],[row,col-1],[row,col+1]]
+            .filter(([r,c])=>r>=0&&r<10&&c>=0&&c<10)
+            .map(([r,c])=>r*10+c);
+        }).filter(index=>choices.includes(index));
+        const smartShot = nearby.length && Math.random() < (.15 + level * .008);
+        computer.shots.push(smartShot ? nearby[Math.floor(Math.random()*nearby.length)] : choices[Math.floor(Math.random() * choices.length)]);
         if (allSunk("host", "guest")) {
           battle.phase = "finished";
           battle.winner = "guest";

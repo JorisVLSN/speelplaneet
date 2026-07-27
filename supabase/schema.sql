@@ -1,7 +1,7 @@
 create table if not exists public.multiplayer_rooms (
   id uuid primary key default gen_random_uuid(),
   join_code text not null unique check (join_code ~ '^[A-Z]{3}-[0-9]{3}$'),
-  game_type text not null check (game_type in ('galgje', 'zeeslag')),
+  game_type text not null,
   host_id text not null,
   host_name text not null check (char_length(host_name) between 1 and 16),
   guest_id text,
@@ -13,6 +13,12 @@ create table if not exists public.multiplayer_rooms (
 );
 
 alter table public.multiplayer_rooms enable row level security;
+
+alter table public.multiplayer_rooms
+  drop constraint if exists multiplayer_rooms_game_type_check;
+alter table public.multiplayer_rooms
+  add constraint multiplayer_rooms_game_type_check
+  check (game_type in ('galgje', 'zeeslag', 'vieropeenrij', 'boterkaaseieren'));
 
 drop policy if exists "rooms_can_be_read_by_code" on public.multiplayer_rooms;
 create policy "rooms_can_be_read_by_code"
