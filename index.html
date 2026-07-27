@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fff7e8" />
+    <meta name="description" content="Een vrolijke, veilige speelplek vol puzzels en spelletjes." />
+    <title>Speelplaneet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="sky-blob blob-one"></div>
+    <div class="sky-blob blob-two"></div>
+
+    <main id="app">
+      <section id="login-view" class="login-shell">
+        <div class="brand brand-login"><span class="brand-mark">✦</span> Speelplaneet</div>
+        <img class="login-art" src="assets/ellie-en-mila-speelplaneet.png" alt="Cartoon van Ellie en Mila als avonturiers op Speelplaneet" />
+        <div class="login-card">
+          <div class="mascot" aria-hidden="true">🪐</div>
+          <p class="eyebrow">KLAAR VOOR AVONTUUR?</p>
+          <h1>Welkom op jouw<br /><span>Speelplaneet!</span></h1>
+          <p class="intro">Spelletjes, puzzels en sterren. Allemaal op één vrolijke plek.</p>
+          <form id="login-form">
+            <label for="player-name">Hoe heet jij?</label>
+            <input id="player-name" maxlength="16" autocomplete="nickname" placeholder="Bijvoorbeeld: Noor" required />
+            <label for="player-pin">Jouw geheime pincode</label>
+            <input id="player-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required />
+            <button class="primary-button" type="submit">Start met spelen <span>→</span></button>
+          </form>
+          <p class="privacy-note">🔒 We bewaren je voortgang alleen op dit apparaat.</p>
+        </div>
+      </section>
+
+      <section id="dashboard-view" class="hidden">
+        <header class="topbar">
+          <button class="brand brand-button" data-action="home"><span class="brand-mark">✦</span> Speelplaneet</button>
+          <div class="profile-chip">
+            <div class="avatar" id="avatar">N</div>
+            <div><small>Hoi!</small><strong id="profile-name">Noor</strong></div>
+            <div class="level-pill">⭐ <span id="header-stars">0</span></div>
+          </div>
+        </header>
+
+        <div class="page-shell">
+          <section id="home-screen">
+            <div class="hero">
+              <div>
+                <p class="eyebrow">JOUW SPEELWERELD</p>
+                <h2>Wat gaan we vandaag <span>ontdekken?</span></h2>
+                <p>Kies een spel, verzamel sterren en klim naar het volgende level.</p>
+              </div>
+              <div class="hero-side">
+                <div class="hero-art-card">
+                  <img src="assets/ellie-en-mila-speelplaneet.png" alt="Ellie en Mila in hun speelse ruimtewereld" />
+                  <span>Ellie & Mila’s speelwereld ✦</span>
+                </div>
+                <div class="progress-card">
+                  <div class="level-orbit">🏆</div>
+                  <div>
+                    <small>LEVEL <span id="level-number">1</span></small>
+                    <strong id="level-title">Ruimteverkenner</strong>
+                    <div class="progress-track"><span id="level-progress"></span></div>
+                    <small><span id="progress-stars">0</span> / 5 sterren</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="section-heading">
+              <div><p class="eyebrow">KIES EEN SPEL</p><h3>Jouw favorieten</h3></div>
+              <button class="text-button" id="reset-profile">Ander profiel</button>
+            </div>
+            <div id="game-grid" class="game-grid"></div>
+
+            <section class="daily-card">
+              <div class="daily-icon">☀️</div>
+              <div><p class="eyebrow">DAGELIJKSE MISSIE</p><h3>Verdien een bonusster!</h3><p>Voltooi vandaag twee verschillende spellen.</p></div>
+              <div class="daily-progress"><strong id="daily-count">0 / 2</strong><span>spellen klaar</span></div>
+            </section>
+          </section>
+
+          <section id="game-screen" class="hidden">
+            <button class="back-button" data-action="home">← Terug naar alle spellen</button>
+            <div id="game-stage"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
