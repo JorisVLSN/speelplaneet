@@ -228,6 +228,7 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .game-level-bar { display:flex;align-items:center;gap:10px;margin:-10px 0 23px;padding:10px 13px;border:1px solid #ebe2d5;border-radius:15px;background:#fffaf1; }
 .game-level-bar small { color:var(--muted);font-size:10px;font-weight:900;letter-spacing:1px; }
 .game-level-bar>span { padding:5px 9px;border-radius:99px;color:#755cad;background:#ece5ff;font-size:11px;font-weight:900; }
+.mission-code { color:#9a8f7f !important;font-family:monospace;font-size:9px !important;letter-spacing:.5px !important; }
 .level-select-wrap { display:flex;align-items:center;gap:6px;margin:0; }
 .level-select-wrap select { padding:6px 25px 6px 8px;border:1px solid #ded4c5;border-radius:9px;color:var(--ink);background:white;font-weight:900; }
 .level-nav-button { min-height:34px;padding:0 11px;border:0;border-radius:10px;color:var(--ink);background:#e9e3d8;font-weight:900; }
@@ -266,6 +267,31 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .simon-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:13px;width:min(380px,100%);margin:30px auto; }
 .simon-pad { aspect-ratio:1;border:0;border-radius:28px;opacity:.72;box-shadow:0 8px 0 rgba(36,48,74,.2);transition:.12s; }
 .simon-pad.flash { opacity:1;transform:scale(1.06);filter:brightness(1.28);box-shadow:0 0 30px currentColor; }
+.runner-panel { overflow:hidden; }
+.runner-toolbar { display:flex;justify-content:space-between;align-items:center;gap:15px;margin:20px 0 12px; }
+.runner-choices { display:flex;gap:9px; }
+.runner-choice { display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border:2px solid transparent;border-radius:14px;background:#f1ece3;font-weight:900; }
+.runner-choice.active { border-color:var(--orange);background:#fff0e7; }
+.runner-choice img { width:46px;height:46px;border-radius:11px;object-fit:cover; }
+.runner-score { text-align:right; }.runner-score small,.runner-score strong { display:block; }.runner-score strong { font:700 23px "Fredoka"; }
+.runner-status { margin:10px 0;padding:10px 15px;border-radius:12px;background:#fff3c9;font-weight:900;text-align:center; }
+.runner-world { position:relative;height:360px;overflow:hidden;border:3px solid #9f8cd9;border-radius:24px;background:linear-gradient(#302c67 0 68%,#69579c 68% 76%,#d7b477 76%);outline:none; }
+.space-stars { position:absolute;inset:0;background-image:radial-gradient(circle,#fff 1px,transparent 2px);background-size:31px 31px;opacity:.65;animation:stars-move 8s linear infinite; }
+.space-planet { position:absolute;border-radius:50%;opacity:.8; }
+.planet-a { width:90px;height:90px;right:15%;top:35px;background:#ff8450;box-shadow:inset -15px -10px #d85f68; }
+.planet-b { width:45px;height:45px;right:44%;top:65px;background:#58b5e8;box-shadow:inset -8px -5px #477bc1; }
+.runner-ground { position:absolute;left:0;right:0;bottom:28px;height:5px;background:#f7d56b;box-shadow:0 7px 0 rgba(36,48,74,.28); }
+.runner-character { position:absolute;z-index:3;left:42px;bottom:32px;width:118px;height:118px;object-fit:cover;border-radius:24px;box-shadow:0 7px 0 rgba(36,48,74,.25);transition:height .12s,width .12s; }
+.runner-character.ducking { width:108px;height:70px;object-position:center 35%; }
+.runner-obstacle { position:absolute;z-index:2;left:0;display:grid;place-items:center;will-change:transform; }
+.obstacle-robot { bottom:32px;width:62px;height:67px;font-size:52px; }
+.obstacle-ufo { bottom:130px;width:82px;height:54px;font-size:62px; }
+.runner-controls { display:grid;grid-template-columns:1fr 1.2fr 1fr;gap:10px;margin-top:15px; }
+.runner-controls .primary-button { margin:0; }
+.runner-action { min-height:52px;border:0;border-radius:15px;color:var(--ink);background:#dff3ff;font-weight:900; }
+.duck-action { background:#ece5ff; }
+.runner-help { margin:11px 0 0;color:var(--muted);font-size:12px;text-align:center; }
+@keyframes stars-move { to { background-position:-124px 0; } }
 
 @media (max-width: 900px) {
   .login-shell { place-items: end center; padding-bottom: 30px; }
@@ -308,4 +334,9 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
   .game-level-bar { flex-wrap:wrap; }
   .level-dots { display:none; }
   .level-next-button { margin-left:auto; }
+  .runner-world { height:300px; }
+  .runner-character { left:20px;width:95px;height:95px; }
+  .runner-toolbar { align-items:flex-end; }
+  .runner-choice { padding-right:7px; }.runner-choice img { width:38px;height:38px; }
+  .runner-help { display:none; }
 }

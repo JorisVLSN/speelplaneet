@@ -9,6 +9,7 @@ const games = [
   { id: "mastermind", title: "Kleurcode", icon: "🎨", color: "green", description: "Kraak de geheime kleurcode.", modes: "100 levels" },
   { id: "rekensprint", title: "Rekensprint", icon: "➕", color: "orange", description: "Los snelle sommen op.", modes: "100 levels" },
   { id: "simon", title: "Sterrenreeks", icon: "✨", color: "purple", description: "Onthoud de kleurenreeks.", modes: "100 levels" },
+  { id: "ruimterunner", title: "Ruimterunner", icon: "🏃", color: "blue", description: "Spring over robots en buk voor ufo’s.", modes: "Ellie of Mila · 100 levels" },
 ];
 
 const state = {
@@ -22,6 +23,7 @@ const state = {
   sessionId: localStorage.getItem("speelplaneet-session") || crypto.randomUUID(),
   inviteHandled: false,
   selectedLevels: {},
+  gameCleanup: null,
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
 state.progress.levels ||= {};
@@ -60,6 +62,39 @@ function difficultyBand(level) {
   return "Kampioen";
 }
 
+function levelSeed(gameId, level = gameLevel(gameId)) {
+  let hash = 2166136261;
+  for (const char of `${gameId}-${level}-speelplaneet`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function levelRng(gameId, level = gameLevel(gameId)) {
+  let seed = levelSeed(gameId, level);
+  return () => {
+    seed += 0x6D2B79F5;
+    let value = seed;
+    value = Math.imul(value ^ value >>> 15, value | 1);
+    value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function shuffled(items, random) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index--) {
+    const swap = Math.floor(random() * (index + 1));
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
+}
+
+function missionCode(gameId, level = gameLevel(gameId)) {
+  return `${gameId.slice(0, 3).toUpperCase()}-${String(level).padStart(3, "0")}-${levelSeed(gameId, level).toString(36).slice(-3).toUpperCase()}`;
+}
+
 function addLevelBar(gameId) {
   const panel = stage.querySelector(".game-panel");
   if (!panel) return;
@@ -72,6 +107,7 @@ function addLevelBar(gameId) {
       <select data-level-select aria-label="Kies niveau">${Array.from({length:unlocked},(_,index)=>`<option value="${index+1}" ${index+1===level?"selected":""}>${index+1} / 100</option>`).join("")}</select>
     </label>
     <span>${difficultyBand(level)}</span>
+    <small class="mission-code" title="Unieke levelcode">${missionCode(gameId, level)}</small>
     <div class="level-dots">${[20,40,60,80,100].map(mark => `<i class="${level >= mark ? "reached" : ""}"></i>`).join("")}</div>
     <button class="level-nav-button level-next-button" data-level-next ${level >= unlocked ? "disabled" : ""}>Volgende →</button>
   </div>`);
@@ -229,6 +265,10 @@ function showDashboard() {
 }
 
 function renderHome() {
+  if (state.gameCleanup) {
+    state.gameCleanup();
+    state.gameCleanup = null;
+  }
   homeScreen.classList.remove("hidden");
   gameScreen.classList.add("hidden");
   const stars = state.progress.stars || 0;
@@ -268,6 +308,10 @@ function completeGame(gameId, message) {
 }
 
 function openGame(id) {
+  if (state.gameCleanup) {
+    state.gameCleanup();
+    state.gameCleanup = null;
+  }
   leaveRoom();
   state.activeGame = id;
   homeScreen.classList.add("hidden");
@@ -282,6 +326,7 @@ function openGame(id) {
   if (id === "mastermind") renderMastermind();
   if (id === "rekensprint") renderMathSprint();
   if (id === "simon") renderSimon();
+  if (id === "ruimterunner") renderSpaceRunner();
   addLevelBar(id);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -359,8 +404,7 @@ function renderHangman() {
     { name:"Toverkracht", full:"✦", empty:"·", intro:"Gebruik je letters voordat de toverkracht verdwijnt." },
     { name:"Zaklamplicht", full:"■", empty:"□", intro:"Vind het woord zolang je zaklamp nog schijnt." }
   ];
-  const poolSize = Math.min(words.length, 4 + Math.floor(level / 9));
-  const chosen = words[Math.floor(Math.random() * poolSize)];
+  const chosen = words[(level - 1) % words.length];
   let word = chosen.word;
   let wordHint = chosen.hint;
   const meter = meters[(level - 1) % meters.length];
@@ -415,9 +459,10 @@ function renderHangman() {
 
 function renderSudoku() {
   const level = gameLevel("sudoku");
+  const random = levelRng("sudoku", level);
   const solution = [1,2,3,4, 3,4,1,2, 2,1,4,3, 4,3,2,1];
   const clueCount = Math.max(4, 10 - Math.floor((level - 1) / 17));
-  const cluePositions = Array.from({length:16},(_,i)=>(i*7+level*3)%16).slice(0,clueCount);
+  const cluePositions = shuffled(Array.from({length:16},(_,i)=>i), random).slice(0,clueCount);
   const puzzle = solution.map((value,index)=>cluePositions.includes(index)?value:0);
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
@@ -439,9 +484,19 @@ function renderSudoku() {
 
 function renderWordSearch() {
   const level = gameLevel("woordzoeker");
-  const rows = ["STERABCD","QZEEFGHI","JKLMNOPQ","RAKETUVW","XYZAARDE","BCDEFGHI","MAANJKLM","NOPQRSTU"];
+  const random = levelRng("woordzoeker", level);
   const allWords = ["STER", "ZEE", "RAKET", "AARDE", "MAAN"];
   const words = allWords.slice(0, Math.min(5, 3 + Math.floor((level - 1) / 34)));
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const grid = Array.from({length:64},()=>letters[Math.floor(random()*letters.length)]);
+  words.forEach((word,index)=>{
+    const row=index;
+    const start=Math.floor(random()*(9-word.length));
+    [...word].forEach((letter,offset)=>grid[row*8+start+offset]=letter);
+  });
+  grid[62]=letters[Math.floor((level-1)/26)%26];
+  grid[63]=letters[(level-1)%26];
+  const rows = Array.from({length:8},(_,row)=>grid.slice(row*8,row*8+8).join(""));
   const found = new Set();
   let selected = [];
   stage.innerHTML = `<div class="game-layout">
@@ -478,10 +533,11 @@ function renderWordSearch() {
 
 function renderMemory() {
   const level = gameLevel("memory");
+  const random = levelRng("memory", level);
   const allSymbols = ["🚀", "🪐", "⭐", "👽", "🌙", "🛰️", "☄️", "🌍", "🔭", "🛸", "🌌", "👩‍🚀"];
   const pairCount = Math.min(12, 4 + Math.floor((level - 1) / 12));
   const symbols = allSymbols.slice(0, pairCount);
-  const cards = [...symbols, ...symbols].sort(() => Math.random() - .5);
+  const cards = shuffled([...symbols, ...symbols], random);
   let open = [], found = new Set(), moves = 0, locked = false;
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
@@ -518,6 +574,7 @@ function renderMemory() {
 
 function renderTicTacToe() {
   const level = gameLevel("boterkaaseieren");
+  const random = levelRng("boterkaaseieren", level);
   let game = { kind: "boterkaaseieren", board: Array(9).fill(null), turn: "host", winner: null };
   const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
   const mark = playerRole => playerRole === "host" ? "X" : "O";
@@ -553,8 +610,8 @@ function renderTicTacToe() {
     if (!state.room && !game.winner) {
       const free = game.board.map((v,i) => v ? null : i).filter(i => i !== null);
       const tactical = symbol => free.find(i => { const test=[...game.board];test[i]=symbol;return winner(test)===symbol; });
-      const smart = Math.random() < (.2 + level * .008);
-      const choice = smart ? (tactical("O") ?? tactical("X") ?? (free.includes(4) ? 4 : free[Math.floor(Math.random()*free.length)])) : free[Math.floor(Math.random()*free.length)];
+      const smart = random() < (.2 + level * .008);
+      const choice = smart ? (tactical("O") ?? tactical("X") ?? (free.includes(4) ? 4 : free[Math.floor(random()*free.length)])) : free[Math.floor(random()*free.length)];
       game.board[choice] = "O"; game.winner = winner(game.board); game.turn = "host";
     }
     if (game.winner === mark(role())) completeGame("boterkaaseieren", "Drie op een rij!");
@@ -565,6 +622,7 @@ function renderTicTacToe() {
 
 function renderConnectFour() {
   const level = gameLevel("vieropeenrij");
+  const random = levelRng("vieropeenrij", level);
   let game = { kind: "vieropeenrij", board: Array(42).fill(null), turn: "host", winner: null };
   const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
   const token = r => r === "host" ? "red" : "yellow";
@@ -603,9 +661,9 @@ function renderConnectFour() {
       const valid = [0,1,2,3,4,5,6].filter(c => !game.board[c]);
       const winning = valid.find(c=>{const test=[...game.board];drop(test,c,"yellow");return hasFour(test,"yellow");});
       const blocking = valid.find(c=>{const test=[...game.board];drop(test,c,"red");return hasFour(test,"red");});
-      const smart = Math.random() < (.15 + level * .0085);
+      const smart = random() < (.15 + level * .0085);
       const preferred = valid.slice().sort((a,b)=>Math.abs(a-3)-Math.abs(b-3));
-      const col = smart ? (winning ?? blocking ?? preferred[0]) : valid[Math.floor(Math.random()*valid.length)];
+      const col = smart ? (winning ?? blocking ?? preferred[0]) : valid[Math.floor(random()*valid.length)];
       drop(game.board, col, "yellow");
       game.winner = hasFour(game.board, "yellow") ? "yellow" : game.board.every(Boolean) ? "draw" : null;
       game.turn = "host";
@@ -621,7 +679,7 @@ function renderMastermind() {
   const colors = ["coral","blue","yellow","purple","green","navy"];
   const codeLength = Math.min(6, 3 + Math.floor((level - 1) / 25));
   const maxTurns = Math.max(6, 10 - Math.floor((level - 1) / 25));
-  const secret = Array.from({length:codeLength}, () => colors[Math.floor(Math.random()*colors.length)]);
+  const secret = Array.from({length:codeLength}, (_,position) => colors[Math.floor((level-1)/(6**position))%6]);
   let guess = [], turn = 1;
   stage.innerHTML = `<div class="game-layout"><div class="game-panel">
     <p class="eyebrow">LOGICAPUZZEL</p><h2>🎨 Kraak de kleurcode</h2>
@@ -650,6 +708,7 @@ function renderMastermind() {
 
 function renderMathSprint() {
   const level=gameLevel("rekensprint"), total=Math.min(20,8+Math.floor(level/8));
+  const random=levelRng("rekensprint",level);
   let question=0, score=0, answer=0;
   stage.innerHTML=`<div class="game-layout"><div class="game-panel math-panel">
     <p class="eyebrow">REKENMISSIE</p><h2>➕ Rekensprint</h2><p class="game-subtitle">Los ${total} sommen op. Rustig nadenken mag!</p>
@@ -657,7 +716,7 @@ function renderMathSprint() {
     <div class="math-question" id="math-question"></div>
     <form id="math-form"><input id="math-answer" inputmode="numeric" autocomplete="off" aria-label="Antwoord"><button class="primary-button">Controleer</button></form>
   </div>${sidePanel("Rekentip","Splits een moeilijke som op in twee kleinere stapjes.",false)}</div>`;
-  const next=()=>{const range=10+Math.floor(level*1.8),a=2+Math.floor(Math.random()*range),b=2+Math.floor(Math.random()*range);let op="+";if(level>25&&Math.random()>.55)op="-";if(level>65&&Math.random()>.72)op="×";if(op==="+"){answer=a+b;$("#math-question").textContent=`${a} + ${b} = ?`;}else if(op==="-"){answer=Math.abs(a-b);$("#math-question").textContent=`${Math.max(a,b)} − ${Math.min(a,b)} = ?`;}else{const x=2+Math.floor(Math.random()*Math.min(10,2+level/10)),y=2+Math.floor(Math.random()*10);answer=x*y;$("#math-question").textContent=`${x} × ${y} = ?`;}$("#math-answer").value="";$("#math-answer").focus();};
+  const next=()=>{const range=10+Math.floor(level*1.8),a=question===0?level+2:2+Math.floor(random()*range),b=question===0?(level%9)+2:2+Math.floor(random()*range);let op="+";if(question>0&&level>25&&random()>.55)op="-";if(question>0&&level>65&&random()>.72)op="×";if(op==="+"){answer=a+b;$("#math-question").textContent=`${a} + ${b} = ?`;}else if(op==="-"){answer=Math.abs(a-b);$("#math-question").textContent=`${Math.max(a,b)} − ${Math.min(a,b)} = ?`;}else{const x=2+Math.floor(random()*Math.min(10,2+level/10)),y=2+Math.floor(random()*10);answer=x*y;$("#math-question").textContent=`${x} × ${y} = ?`;}$("#math-answer").value="";$("#math-answer").focus();};
   $("#math-form").addEventListener("submit",e=>{e.preventDefault();if(Number($("#math-answer").value)===answer){score++;toast("Goed gerekend!");}else toast(`Bijna! Het antwoord was ${answer}.`);question++;if(question===total){$("#math-question").textContent=`${score} van de ${total} goed!`;$("#math-form").classList.add("hidden");if(score>=Math.ceil(total*.7))completeGame("rekensprint","Rekensprint voltooid!");}else{$("#math-status").textContent=`Som ${question+1} van ${total} · Score: ${score}`;next();}});
   next();
 }
@@ -665,6 +724,7 @@ function renderMathSprint() {
 function renderSimon() {
   const gameLvl=gameLevel("simon"), target=Math.min(15,4+Math.floor((gameLvl-1)/9));
   const colors=["coral","blue","yellow","purple"]; let sequence=[],input=[],level=0,accepting=false;
+  const levelSequence=Array.from({length:target},(_,position)=>colors[Math.floor((gameLvl-1)/(4**position))%4]);
   stage.innerHTML=`<div class="game-layout"><div class="game-panel simon-panel">
     <p class="eyebrow">GEHEUGENMISSIE</p><h2>✨ Sterrenreeks</h2><p class="game-subtitle">Bekijk de lichtjes en tik daarna precies dezelfde reeks.</p>
     <div class="status-box" id="simon-status">Druk op start wanneer je klaar bent.</div>
@@ -672,13 +732,169 @@ function renderSimon() {
     <button class="primary-button" id="start-simon">Start de reeks</button>
   </div>${sidePanel("Onthoudtip","Zeg de kleuren zachtjes in je hoofd terwijl ze oplichten.",false)}</div>`;
   const flash=async()=>{accepting=false;$("#simon-status").textContent=`Kijk goed… level ${level}`;for(const c of sequence){await new Promise(r=>setTimeout(r,350));const p=document.querySelector(`[data-simon="${c}"]`);p.classList.add("flash");await new Promise(r=>setTimeout(r,420));p.classList.remove("flash");}input=[];accepting=true;$("#simon-status").textContent="Jouw beurt!";};
-  const advance=()=>{level++;sequence.push(colors[Math.floor(Math.random()*colors.length)]);flash();};
+  const advance=()=>{level++;sequence.push(levelSequence[level-1]);flash();};
   $("#start-simon").addEventListener("click",()=>{$("#start-simon").classList.add("hidden");advance();});
   document.querySelectorAll("[data-simon]").forEach(p=>p.addEventListener("click",()=>{if(!accepting)return;input.push(p.dataset.simon);const i=input.length-1;if(input[i]!==sequence[i]){accepting=false;$("#simon-status").textContent=`Oeps! Je haalde reeks ${level}.`;$("#start-simon").textContent="Opnieuw";$("#start-simon").classList.remove("hidden");sequence=[];level=0;}else if(input.length===sequence.length){accepting=false;if(level===target){completeGame("simon",`${target} reeksen onthouden!`);$("#simon-status").textContent=`🏆 Alle ${target} reeksen goed onthouden!`;}else setTimeout(advance,650);}}));
 }
 
+function renderSpaceRunner() {
+  const level = gameLevel("ruimterunner");
+  const random = levelRng("ruimterunner", level);
+  const target = Math.min(35, 8 + Math.floor((level - 1) / 4));
+  const baseSpeed = 4.2 + level * .026;
+  let character = localStorage.getItem("speelplaneet-runner") || "ellie";
+  let running = false, jumping = false, ducking = false, y = 0, velocity = 0;
+  let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
+  const obstacles = [];
+
+  stage.innerHTML = `<div class="game-panel runner-panel">
+    <p class="eyebrow">OFFLINE RUIMTEMISSIE</p><h2>🏃 Ellie & Mila’s Ruimterunner</h2>
+    <p class="game-subtitle">Spring over ruimterobots en buk onder vliegende ufo’s. Dit spel blijft ook zonder internet werken.</p>
+    <div class="runner-toolbar">
+      <div class="runner-choices">
+        <button class="runner-choice ${character === "ellie" ? "active" : ""}" data-runner-choice="ellie"><img src="assets/ellie-runner.png" alt="" /><span>Ellie</span></button>
+        <button class="runner-choice ${character === "mila" ? "active" : ""}" data-runner-choice="mila"><img src="assets/mila-runner.png" alt="" /><span>Mila</span></button>
+      </div>
+      <div class="runner-score"><small>MISSIE</small><strong><span id="runner-score">0</span> / ${target}</strong></div>
+    </div>
+    <div class="runner-status" id="runner-status">Kies Ellie of Mila en start de ruimtemissie!</div>
+    <div class="runner-world" id="runner-world" tabindex="0" aria-label="Ruimterunner speelveld">
+      <div class="space-stars"></div><div class="space-planet planet-a"></div><div class="space-planet planet-b"></div>
+      <div class="runner-ground"></div>
+      <img class="runner-character" id="runner-character" src="assets/${character}-runner.png" alt="${character === "ellie" ? "Ellie" : "Mila"} rent door de ruimte" />
+    </div>
+    <div class="runner-controls">
+      <button class="runner-action jump-action" id="runner-jump">↑ Spring</button>
+      <button class="primary-button" id="runner-start">Start missie</button>
+      <button class="runner-action duck-action" id="runner-duck">↓ Bukken</button>
+    </div>
+    <p class="runner-help">Toetsenbord: spatie of ↑ om te springen · ↓ om te bukken</p>
+  </div>`;
+
+  const world = $("#runner-world");
+  const runner = $("#runner-character");
+  const status = $("#runner-status");
+
+  const setCharacter = name => {
+    if (running) return;
+    character = name;
+    localStorage.setItem("speelplaneet-runner", name);
+    runner.src = `assets/${name}-runner.png`;
+    runner.alt = `${name === "ellie" ? "Ellie" : "Mila"} rent door de ruimte`;
+    document.querySelectorAll("[data-runner-choice]").forEach(button => button.classList.toggle("active", button.dataset.runnerChoice === name));
+  };
+
+  const jump = () => {
+    if (!running || jumping) return;
+    jumping = true; ducking = false; runner.classList.remove("ducking");
+    velocity = 13.2;
+  };
+  const duck = active => {
+    if (!running || jumping) return;
+    ducking = active;
+    runner.classList.toggle("ducking", active);
+  };
+
+  const spawnObstacle = () => {
+    const type = level < 8 ? "robot" : (random() < Math.min(.55, .18 + level / 180) ? "ufo" : "robot");
+    const element = document.createElement("div");
+    element.className = `runner-obstacle obstacle-${type}`;
+    element.textContent = type === "robot" ? "🤖" : "🛸";
+    element.setAttribute("aria-hidden", "true");
+    world.appendChild(element);
+    obstacles.push({ element, type, x: world.clientWidth + 50, counted: false });
+  };
+
+  const collides = obstacle => {
+    const runnerRect = runner.getBoundingClientRect();
+    const obstacleRect = obstacle.element.getBoundingClientRect();
+    const padding = 12;
+    return runnerRect.right - padding > obstacleRect.left + padding &&
+      runnerRect.left + padding < obstacleRect.right - padding &&
+      runnerRect.bottom - 7 > obstacleRect.top + 8 &&
+      runnerRect.top + 8 < obstacleRect.bottom - 5;
+  };
+
+  const finish = won => {
+    running = false;
+    cancelAnimationFrame(frame);
+    $("#runner-start").classList.remove("hidden");
+    $("#runner-start").textContent = won ? "Speel nog eens" : "Probeer opnieuw";
+    status.textContent = won ? `🏆 ${character === "ellie" ? "Ellie" : "Mila"} heeft de ruimtemissie voltooid!` : "Botsing! Gelukkig beschermde het ruimtepak je.";
+    if (won) completeGame("ruimterunner", "Ruimtemissie voltooid!");
+  };
+
+  const loop = time => {
+    if (!running) return;
+    const delta = Math.min(32, time - lastTime || 16.7);
+    lastTime = time;
+    const speed = baseSpeed * (delta / 16.7);
+    distance += delta;
+    nextSpawn -= delta;
+    if (nextSpawn <= 0) {
+      spawnObstacle();
+      const difficultyGap = Math.max(720, 1450 - level * 5.5);
+      nextSpawn = difficultyGap + random() * 650;
+    }
+    if (jumping) {
+      y += velocity * (delta / 16.7);
+      velocity -= .72 * (delta / 16.7);
+      if (y <= 0) { y = 0; velocity = 0; jumping = false; }
+      runner.style.transform = `translateY(${-y}px)`;
+    }
+    for (let index = obstacles.length - 1; index >= 0; index--) {
+      const obstacle = obstacles[index];
+      obstacle.x -= speed;
+      obstacle.element.style.transform = `translateX(${obstacle.x}px)`;
+      if (collides(obstacle)) return finish(false);
+      if (!obstacle.counted && obstacle.x < 35) {
+        obstacle.counted = true; passed++;
+        $("#runner-score").textContent = passed;
+        status.textContent = `${target - passed} hindernissen te gaan — goed bezig!`;
+        if (passed >= target) return finish(true);
+      }
+      if (obstacle.x < -100) { obstacle.element.remove(); obstacles.splice(index, 1); }
+    }
+    frame = requestAnimationFrame(loop);
+  };
+
+  const start = () => {
+    obstacles.splice(0).forEach(obstacle => obstacle.element.remove());
+    running = true; jumping = false; ducking = false; y = 0; velocity = 0; passed = 0; distance = 0;
+    nextSpawn = 850 + random() * 500; runner.style.transform = ""; runner.classList.remove("ducking");
+    $("#runner-score").textContent = "0"; $("#runner-start").classList.add("hidden");
+    status.textContent = "De missie is gestart — let goed op!";
+    lastTime = performance.now(); world.focus(); frame = requestAnimationFrame(loop);
+  };
+
+  document.querySelectorAll("[data-runner-choice]").forEach(button => button.addEventListener("click", () => setCharacter(button.dataset.runnerChoice)));
+  $("#runner-start").addEventListener("click", start);
+  $("#runner-jump").addEventListener("pointerdown", jump);
+  $("#runner-duck").addEventListener("pointerdown", () => duck(true));
+  $("#runner-duck").addEventListener("pointerup", () => duck(false));
+  $("#runner-duck").addEventListener("pointerleave", () => duck(false));
+  const keyHandler = event => {
+    if (!stage.contains(world)) return document.removeEventListener("keydown", keyHandler);
+    if (event.code === "Space" || event.code === "ArrowUp") { event.preventDefault(); jump(); }
+    if (event.code === "ArrowDown") { event.preventDefault(); duck(true); }
+  };
+  const keyUpHandler = event => {
+    if (!stage.contains(world)) return document.removeEventListener("keyup", keyUpHandler);
+    if (event.code === "ArrowDown") duck(false);
+  };
+  document.addEventListener("keydown", keyHandler);
+  document.addEventListener("keyup", keyUpHandler);
+  state.gameCleanup = () => {
+    running = false;
+    cancelAnimationFrame(frame);
+    document.removeEventListener("keydown", keyHandler);
+    document.removeEventListener("keyup", keyUpHandler);
+  };
+}
+
 function renderBattleship() {
   const level = gameLevel("zeeslag");
+  const random = levelRng("zeeslag", level);
   const fleet = [5, 4, 3, 3, 2];
   let orientation = "horizontal";
   let selectedShip = 0;
@@ -755,8 +971,8 @@ function renderBattleship() {
     fleet.forEach((length, index) => {
       let placed = false;
       while (!placed) {
-        orientation = Math.random() > .5 ? "horizontal" : "vertical";
-        const start = Math.floor(Math.random() * 100);
+        orientation = random() > .5 ? "horizontal" : "vertical";
+        const start = Math.floor(random() * 100);
         const cells = cellsForPlacement(start, length);
         if (cells && !cells.some(cell => occupied(player).has(cell))) {
           player.ships.push({ index, length, cells });
@@ -872,8 +1088,8 @@ function renderBattleship() {
             .filter(([r,c])=>r>=0&&r<10&&c>=0&&c<10)
             .map(([r,c])=>r*10+c);
         }).filter(index=>choices.includes(index));
-        const smartShot = nearby.length && Math.random() < (.15 + level * .008);
-        computer.shots.push(smartShot ? nearby[Math.floor(Math.random()*nearby.length)] : choices[Math.floor(Math.random() * choices.length)]);
+        const smartShot = nearby.length && random() < (.15 + level * .008);
+        computer.shots.push(smartShot ? nearby[Math.floor(random()*nearby.length)] : choices[Math.floor(random() * choices.length)]);
         if (allSunk("host", "guest")) {
           battle.phase = "finished";
           battle.winner = "guest";
@@ -911,3 +1127,6 @@ $("#reset-profile").addEventListener("click", () => {
 
 initializeOnline();
 if (state.player) showDashboard();
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/service-worker.js").catch(() => {}));
+}
