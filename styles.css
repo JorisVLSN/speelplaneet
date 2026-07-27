@@ -182,12 +182,44 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .word-list { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
 .word-pill { padding: 7px 12px; border-radius: 99px; background: #e8f5ef; font-weight: 800; }
 .word-pill.found { opacity: .45; text-decoration: line-through; }
-.sea-grid { display: grid; grid-template-columns: repeat(6, 1fr); width: min(430px, 100%); gap: 5px; margin: 30px auto; }
-.sea-cell { aspect-ratio: 1; border: 0; border-radius: 9px; background: #dceefa; font-size: 19px; }
+.battle-boards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; margin-top: 26px; }
+.battle-board-wrap { min-width: 0; }
+.board-heading { display: flex; justify-content: space-between; align-items: end; gap: 10px; margin-bottom: 9px; }
+.board-heading strong { font: 700 18px "Fredoka"; }
+.board-heading span { color: var(--muted); font-size: 12px; }
+.sea-grid { display: grid; grid-template-columns: repeat(10, 1fr); width: 100%; gap: 3px; padding: 7px; border: 2px solid #9bcbe6; border-radius: 15px; background: #c9e8f8; }
+.sea-cell { aspect-ratio: 1; min-width: 0; padding: 0; border: 0; border-radius: 5px; background: #e8f7ff; color: #315d78; font-size: clamp(10px, 1.5vw, 17px); font-weight: 900; }
 .sea-cell:hover { background: #bfe4f8; }
-.sea-cell.hit { background: #ffb49a; }
-.sea-cell.miss { background: #e6ebef; }
+.sea-cell.ship { color: #406f8c; background: #82c6e8; }
+.sea-cell.hit { color: #9c321b; background: #ff9f80; }
+.sea-cell.miss { color: #7d9bac; background: #d7e2e8; }
+.sea-cell.revealed { box-shadow: inset 0 0 0 2px #ff8450; }
+.sea-grid.locked { opacity: .58; }
+.fleet-controls { margin-top: 24px; padding: 17px; border-radius: 18px; background: #f4f7fa; }
+.fleet-controls.fleet-locked { opacity: .58; pointer-events: none; }
+.ship-picker { display: flex; flex-wrap: wrap; gap: 7px; }
+.ship-choice { display: grid; gap: 2px; padding: 8px 10px; border: 2px solid transparent; border-radius: 11px; color: #477796; background: #dceefa; text-align: left; }
+.ship-choice span { letter-spacing: 1px; }
+.ship-choice small { color: var(--muted); font-size: 10px; font-weight: 800; }
+.ship-choice.active { border-color: var(--orange); }
+.ship-choice.placed { color: #387658; background: #dff3e8; }
+.fleet-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.ready-button { min-height: 42px; margin: 0 0 0 auto; padding: 0 17px; }
+.ready-button:disabled { opacity: .45; box-shadow: none; cursor: default; }
 .join-code { margin: 18px 0; padding: 16px; border: 2px dashed rgba(255,255,255,.4); border-radius: 15px; text-align: center; font: 700 28px "Fredoka"; letter-spacing: 3px; }
+.online-actions { display: grid; gap: 11px; }
+.online-or { color: #aeb8c9; font-size: 12px; font-weight: 800; text-align: center; text-transform: uppercase; }
+.join-form { display: grid; grid-template-columns: 1fr auto; gap: 7px; }
+.join-form input { min-width: 0; padding: 11px; border: 0; text-transform: uppercase; letter-spacing: 1px; }
+.join-form button { padding: 0 12px; border: 0; border-radius: 12px; color: var(--ink); background: #dff3ff; font-weight: 900; }
+.room-details { margin-top: 9px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.2); text-align: center; }
+.room-details small { color: #bfc8d7; font-weight: 800; letter-spacing: 1px; }
+.online-status { margin-bottom: 0 !important; font-size: 13px; text-align: center; }
+.whatsapp-button {
+  width: 100%; padding: 12px; border: 0; border-radius: 13px;
+  color: white; background: #24a866; font-weight: 900;
+}
+.whatsapp-button::before { content: "◉"; margin-right: 8px; }
 .toast { position: fixed; z-index: 10; left: 50%; bottom: 25px; transform: translate(-50%, 120px); padding: 13px 21px; border-radius: 99px; color: white; background: var(--ink); font-weight: 800; box-shadow: var(--shadow); transition: .25s ease; }
 .toast.show { transform: translate(-50%, 0); }
 
@@ -203,6 +235,7 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
   .hero, .game-layout { grid-template-columns: 1fr; }
   .progress-card { max-width: 420px; }
   .side-panel { order: -1; }
+  .battle-boards { grid-template-columns: 1fr; }
 }
 @media (max-width: 580px) {
   .brand-login { top: 24px; left: 24px; }

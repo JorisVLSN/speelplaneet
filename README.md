@@ -13,4 +13,12 @@ Open `index.html` rechtstreeks in een browser of start een eenvoudige lokale web
 3. Kies **Other** als framework en laat de build-instellingen leeg.
 4. Publiceer de site.
 
-De huidige versie bewaart profielen en voortgang alleen in de browser. Voor echte multiplayer op verschillende apparaten kan Supabase Realtime worden toegevoegd.
+## Supabase en online multiplayer
+
+1. Open de SQL-editor in Supabase en voer `supabase/schema.sql` uit.
+2. Voeg in Vercel `SUPABASE_URL` en `SUPABASE_ANON_KEY` toe.
+3. Publiceer de site opnieuw.
+
+Zeeslag en galgje ondersteunen daarna online kamers met joincodes en gesynchroniseerde spelstanden. Zeeslag gebruikt een klassiek 10×10-bord, een vloot van vijf schepen, een plaatsingsfase en beurtelings schieten. Profielen, pincodes en puzzelvoortgang blijven in deze versie uitsluitend op het eigen apparaat.
+
+Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken de vorm `https://speelplaneet.vercel.app/?game=zeeslag&code=ABC-123` en openen na het aanmelden automatisch het juiste spel en de juiste kamer.
