@@ -745,6 +745,7 @@ function renderSpaceRunner() {
   let character = localStorage.getItem("speelplaneet-runner") || "ellie";
   if (!["ellie","mila","mats"].includes(character)) character = "ellie";
   const runnerName = name => ({ ellie:"Ellie", mila:"Mila", mats:"Mats" }[name] || "Ellie");
+  const runnerHighscores = JSON.parse(localStorage.getItem("speelplaneet-runner-highscores") || "{}");
   let running = false, jumping = false, ducking = false, y = 0, velocity = 0, duckUntil = 0, duckTimer = 0;
   let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
   const obstacles = [];
@@ -758,7 +759,11 @@ function renderSpaceRunner() {
         <button class="runner-choice ${character === "mila" ? "active" : ""}" data-runner-choice="mila"><img src="assets/mila-runner-transparent.png" alt="" /><span>Mila</span></button>
         <button class="runner-choice ${character === "mats" ? "active" : ""}" data-runner-choice="mats"><img src="assets/mats-runner-transparent.png" alt="" /><span>Mats</span></button>
       </div>
-      <div class="runner-score"><small>MISSIE</small><strong><span id="runner-score">0</span> / ${target}</strong></div>
+      <div class="runner-meters">
+        <div class="runner-score"><small>HINDERNISSEN</small><strong><span id="runner-score">0</span> / ${target}</strong></div>
+        <div class="runner-score"><small>AFSTAND</small><strong><span id="runner-distance">0</span> m</strong></div>
+        <div class="runner-score runner-best"><small>HIGH­SCORE</small><strong><span id="runner-best">${runnerHighscores[character] || 0}</span> m</strong></div>
+      </div>
     </div>
     <div class="runner-status" id="runner-status">Kies Ellie of Mila en start de ruimtemissie!</div>
     <div class="runner-world" id="runner-world" tabindex="0" aria-label="Ruimterunner speelveld">
@@ -784,6 +789,7 @@ function renderSpaceRunner() {
     localStorage.setItem("speelplaneet-runner", name);
     runner.src = `assets/${name}-runner-transparent.png`;
     runner.alt = `${runnerName(name)} rent door de ruimte`;
+    $("#runner-best").textContent = runnerHighscores[name] || 0;
     document.querySelectorAll("[data-runner-choice]").forEach(button => button.classList.toggle("active", button.dataset.runnerChoice === name));
   };
 
@@ -835,9 +841,19 @@ function renderSpaceRunner() {
     running = false;
     cancelAnimationFrame(frame);
     clearTimeout(duckTimer);
+    const meters = Math.floor(distance / 100);
+    const previousBest = runnerHighscores[character] || 0;
+    const isRecord = meters > previousBest;
+    if (isRecord) {
+      runnerHighscores[character] = meters;
+      localStorage.setItem("speelplaneet-runner-highscores", JSON.stringify(runnerHighscores));
+      $("#runner-best").textContent = meters;
+    }
     $("#runner-start").classList.remove("hidden");
     $("#runner-start").textContent = won ? "Speel nog eens" : "Probeer opnieuw";
-    status.textContent = won ? `🏆 ${runnerName(character)} heeft de ruimtemissie voltooid!` : "Botsing! Gelukkig beschermde het ruimtepak je.";
+    status.textContent = won
+      ? `🏆 ${runnerName(character)} voltooide de missie met ${meters} meter${isRecord ? " — nieuw record!" : "!"}`
+      : `Botsing na ${meters} meter.${isRecord ? " 🏅 Nieuw afstandsrecord!" : " Gelukkig beschermde het ruimtepak je."}`;
     if (won) completeGame("ruimterunner", "Ruimtemissie voltooid!");
   };
 
@@ -848,6 +864,7 @@ function renderSpaceRunner() {
     const gradualAcceleration = Math.min(2.9, passed * .085 + distance / 48000);
     const speed = (startSpeed + gradualAcceleration) * (delta / 16.7);
     distance += delta;
+    $("#runner-distance").textContent = Math.floor(distance / 100);
     nextSpawn -= delta;
     if (nextSpawn <= 0) {
       spawnObstacle();
@@ -880,7 +897,7 @@ function renderSpaceRunner() {
     obstacles.splice(0).forEach(obstacle => obstacle.element.remove());
     running = true; jumping = false; ducking = false; duckUntil = 0; clearTimeout(duckTimer); y = 0; velocity = 0; passed = 0; distance = 0;
     nextSpawn = 1450 + random() * 650; runner.style.transform = ""; runner.classList.remove("ducking");
-    $("#runner-score").textContent = "0"; $("#runner-start").classList.add("hidden");
+    $("#runner-score").textContent = "0"; $("#runner-distance").textContent = "0"; $("#runner-start").classList.add("hidden");
     status.textContent = "De missie is gestart — let goed op!";
     lastTime = performance.now(); world.focus(); frame = requestAnimationFrame(loop);
   };

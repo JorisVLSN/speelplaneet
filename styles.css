@@ -273,7 +273,10 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .runner-choice { display:flex;align-items:center;gap:8px;padding:5px 12px 5px 5px;border:2px solid transparent;border-radius:14px;background:#f1ece3;font-weight:900; }
 .runner-choice.active { border-color:var(--orange);background:#fff0e7; }
 .runner-choice img { width:46px;height:46px;border-radius:11px;object-fit:cover; }
-.runner-score { text-align:right; }.runner-score small,.runner-score strong { display:block; }.runner-score strong { font:700 23px "Fredoka"; }
+.runner-meters { display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px; }
+.runner-score { min-width:92px;padding:7px 10px;border-radius:12px;background:#f3eee5;text-align:right; }
+.runner-score small,.runner-score strong { display:block; }.runner-score small { color:var(--muted);font-size:9px;font-weight:900;letter-spacing:.8px; }.runner-score strong { font:700 20px "Fredoka"; }
+.runner-best { color:#765c15;background:#fff0b5; }
 .runner-status { margin:10px 0;padding:10px 15px;border-radius:12px;background:#fff3c9;font-weight:900;text-align:center; }
 .runner-world { position:relative;height:360px;overflow:hidden;border:3px solid #9f8cd9;border-radius:24px;background:linear-gradient(#302c67 0 68%,#69579c 68% 76%,#d7b477 76%);outline:none; }
 .space-stars { position:absolute;inset:0;background-image:radial-gradient(circle,#fff 1px,transparent 2px);background-size:31px 31px;opacity:.65;animation:stars-move 8s linear infinite; }
