@@ -7,7 +7,7 @@
 - [x] Tijdelijke vergrendeling na vijf foutieve pincodes.
 - [x] Veilige sessies van dertig dagen en expliciet afmelden.
 - [x] Offline verder spelen met latere synchronisatie.
-- Oudercode en herstelprocedure zonder e-mail van het kind.
+- [x] Zescijferige oudercode en herstelprocedure zonder e-mail van het kind.
 - Database-migraties, centrale foutregistratie en automatische back-ups.
 - Privacy: alleen minimale gegevens, geen openbare profielen of vrije chat.
 

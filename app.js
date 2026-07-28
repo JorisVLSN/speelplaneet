@@ -1212,6 +1212,67 @@ function renderBattleship() {
   wireMultiplayer("zeeslag", () => battle, applySeaState);
 }
 
+let recoveryMode = "reset";
+const recoveryDialog = $("#recovery-dialog");
+
+function openRecovery(mode) {
+  recoveryMode = mode;
+  const setup = mode === "setup";
+  $("#recovery-title").textContent = setup ? "Ouderherstel instellen" : "Pincode herstellen";
+  $("#recovery-intro").textContent = setup
+    ? `Kies een geheime oudercode voor ${state.player?.name || "deze speler"}.`
+    : "Gebruik de oudercode om een nieuwe spelerspincode te kiezen.";
+  $("#recovery-name-wrap").classList.toggle("hidden", setup);
+  $("#new-pin-wrap").classList.toggle("hidden", setup);
+  $("#recovery-name").required = !setup;
+  $("#recovery-new-pin").required = !setup;
+  $("#recovery-submit").textContent = setup ? "Oudercode bewaren" : "Pincode herstellen";
+  $("#recovery-form").reset();
+  recoveryDialog.showModal();
+  setTimeout(() => (setup ? $("#parent-code") : $("#recovery-name")).focus(), 50);
+}
+
+$("#forgot-pin").addEventListener("click", () => openRecovery("reset"));
+$("#parent-recovery").addEventListener("click", () => {
+  if (!state.authToken) return toast("Meld dit profiel eerst online aan om ouderherstel in te stellen.");
+  openRecovery("setup");
+});
+$("#close-recovery").addEventListener("click", () => recoveryDialog.close());
+$("#recovery-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const button = $("#recovery-submit");
+  button.disabled = true;
+  const body = recoveryMode === "setup"
+    ? { action:"setup", parentCode:$("#parent-code").value }
+    : { action:"reset", name:$("#recovery-name").value.trim(), parentCode:$("#parent-code").value, newPin:$("#recovery-new-pin").value };
+  try {
+    const response = await fetch("/api/parent", {
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        ...(recoveryMode === "setup" ? { Authorization:`Bearer ${state.authToken}` } : {}),
+      },
+      body:JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const messages = {
+        WRONG_PARENT_CODE:"De oudercode klopt niet.",
+        RECOVERY_NOT_SET:"Voor deze speler is nog geen oudercode ingesteld.",
+        TEMPORARILY_LOCKED:"Te veel pogingen. Wacht 15 minuten.",
+        INVALID_SESSION:"Meld het profiel opnieuw aan.",
+      };
+      return toast(messages[data.error] || "Herstel lukt nu niet. Probeer later opnieuw.");
+    }
+    recoveryDialog.close();
+    toast(recoveryMode === "setup" ? "Ouderherstel is veilig ingesteld." : "Nieuwe pincode bewaard. Meld opnieuw aan.");
+  } catch {
+    toast("Voor ouderherstel is een internetverbinding nodig.");
+  } finally {
+    button.disabled = false;
+  }
+});
+
 $("#login-form").addEventListener("submit", async event => {
   event.preventDefault();
   const name = $("#player-name").value.trim();

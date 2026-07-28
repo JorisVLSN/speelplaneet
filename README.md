@@ -23,6 +23,8 @@ Zeeslag en galgje ondersteunen daarna online kamers met joincodes en gesynchroni
 
 De service-role-key wordt uitsluitend door Vercel-serverfuncties gebruikt en mag nooit als `NEXT_PUBLIC_`-variabele worden ingesteld. Spelerpincodes worden met `scrypt` en een unieke salt gehasht. Sessietokens worden uitsluitend gehasht in Supabase opgeslagen.
 
+Na het aanmelden kan via **Ouderherstel** een zescijferige oudercode worden ingesteld. Daarmee kan op het aanmeldscherm een vergeten spelerspincode worden vervangen. Ook oudercodes worden gehasht en na vijf foutieve pogingen tijdelijk geblokkeerd.
+
 Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken de vorm `https://speelplaneet.vercel.app/?game=zeeslag&code=ABC-123` en openen na het aanmelden automatisch het juiste spel en de juiste kamer.
 
 ## Spellen

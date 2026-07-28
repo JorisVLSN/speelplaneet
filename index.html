@@ -31,7 +31,8 @@
             <input id="player-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="••••" required />
             <button class="primary-button" type="submit">Start met spelen <span>→</span></button>
           </form>
-          <p class="privacy-note">🔒 We bewaren je voortgang alleen op dit apparaat.</p>
+          <button class="recovery-link" type="button" id="forgot-pin">Pincode vergeten?</button>
+          <p class="privacy-note">🔒 Je voortgang wordt veilig bewaard en werkt ook offline.</p>
         </div>
       </section>
 
@@ -72,7 +73,10 @@
 
             <div class="section-heading">
               <div><p class="eyebrow">KIES EEN SPEL</p><h3>Jouw favorieten</h3></div>
-              <button class="text-button" id="reset-profile">Ander profiel</button>
+              <div class="profile-actions">
+                <button class="text-button" id="parent-recovery">Ouderherstel</button>
+                <button class="text-button" id="reset-profile">Ander profiel</button>
+              </div>
             </div>
             <div id="game-grid" class="game-grid"></div>
 
@@ -92,6 +96,26 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <dialog id="recovery-dialog" class="recovery-dialog">
+      <button class="dialog-close" type="button" id="close-recovery" aria-label="Sluiten">×</button>
+      <p class="eyebrow">VOOR OUDERS</p>
+      <h2 id="recovery-title">Pincode herstellen</h2>
+      <p id="recovery-intro">Gebruik de oudercode om een nieuwe spelerspincode te kiezen.</p>
+      <form id="recovery-form">
+        <div id="recovery-name-wrap">
+          <label for="recovery-name">Naam van de speler</label>
+          <input id="recovery-name" maxlength="16" autocomplete="nickname" required />
+        </div>
+        <label for="parent-code">Zescijferige oudercode</label>
+        <input id="parent-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="••••••" required />
+        <div id="new-pin-wrap">
+          <label for="recovery-new-pin">Nieuwe spelerspincode</label>
+          <input id="recovery-new-pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="••••" />
+        </div>
+        <button class="primary-button" id="recovery-submit" type="submit">Pincode herstellen</button>
+      </form>
+      <p class="privacy-note">Bewaar de oudercode buiten het bereik van de kinderen.</p>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="app.js"></script>
   </body>

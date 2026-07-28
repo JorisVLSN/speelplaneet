@@ -62,11 +62,20 @@ create table if not exists public.players (
   name_key text not null unique,
   pin_salt text not null,
   pin_hash text not null,
+  recovery_salt text,
+  recovery_hash text,
+  recovery_failed_attempts integer not null default 0,
+  recovery_locked_until timestamptz,
   failed_attempts integer not null default 0,
   locked_until timestamptz,
   created_at timestamptz not null default now(),
   last_login_at timestamptz
 );
+
+alter table public.players add column if not exists recovery_salt text;
+alter table public.players add column if not exists recovery_hash text;
+alter table public.players add column if not exists recovery_failed_attempts integer not null default 0;
+alter table public.players add column if not exists recovery_locked_until timestamptz;
 
 create table if not exists public.player_progress (
   player_id uuid primary key references public.players(id) on delete cascade,
