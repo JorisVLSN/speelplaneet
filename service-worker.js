@@ -1,9 +1,14 @@
-const CACHE_NAME = "speelplaneet-offline-v9";
+const CACHE_NAME = "speelplaneet-offline-v28";
 const CORE_ASSETS = [
   "/",
   "/index.html",
   "/styles.css",
+  "/level-engine.js",
   "/app.js",
+  "/manifest.webmanifest",
+  "/assets/speelplaneet-app-icon.svg",
+  "/assets/speelplaneet-app-icon-192.png",
+  "/assets/speelplaneet-app-icon-512.png",
   "/assets/ellie-en-mila-speelplaneet.png",
   "/assets/ellie-runner-transparent.png",
   "/assets/mila-runner-transparent.png",

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Speelplaneet">
+  <defs>
+    <linearGradient id="space" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#493c91"/><stop offset="1" stop-color="#8971d7"/></linearGradient>
+    <linearGradient id="planet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffd75d"/><stop offset="1" stop-color="#ff9f5a"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#space)"/>
+  <circle cx="256" cy="264" r="122" fill="url(#planet)"/>
+  <path d="M75 305c54 52 276 93 361 12 24-23 11-48-29-45-70 5-212 55-309 6-34-17-49 2-23 27Z" fill="none" stroke="#fff4c3" stroke-width="30" stroke-linecap="round"/>
+  <path d="m141 112 10 26 26 10-26 10-10 26-10-26-26-10 26-10Zm246 22 7 18 18 7-18 7-7 18-7-18-18-7 18-7Z" fill="#fff"/>
+  <circle cx="211" cy="246" r="13" fill="#4f3f8f"/><circle cx="301" cy="246" r="13" fill="#4f3f8f"/>
+  <path d="M211 301c28 25 62 25 90 0" fill="none" stroke="#4f3f8f" stroke-width="14" stroke-linecap="round"/>
+</svg>

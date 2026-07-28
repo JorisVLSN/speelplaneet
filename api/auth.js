@@ -57,6 +57,7 @@ module.exports = async function handler(request, response) {
       token,
       player: { id: player.id, name: player.name },
       progress: sanitizeProgress(rows?.[0]?.progress),
+      settings: player.parent_settings || { multiplayerEnabled:true, wordLevel:"auto", mathLevel:"auto", paused:false },
     });
   } catch (error) {
     console.error("auth_error", error.message);

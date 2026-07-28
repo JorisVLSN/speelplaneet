@@ -10,7 +10,12 @@ const games = [
   { id: "rekensprint", title: "Rekensprint", icon: "➕", color: "orange", description: "Los snelle sommen op.", modes: "100 levels" },
   { id: "simon", title: "Sterrenreeks", icon: "✨", color: "purple", description: "Onthoud de kleurenreeks.", modes: "100 levels" },
   { id: "ruimterunner", title: "Ruimterunner", icon: "🏃", color: "blue", description: "Spring over robots en buk voor ufo’s.", modes: "Ellie, Mila of Mats · 100 levels" },
+  { id: "doolhof", title: "Sterren­doolhof", icon: "🌀", color: "green", description: "Vind de veiligste route naar de planeet.", modes: "100 levels" },
 ];
+const gameCategories = {
+  zeeslag:"Samen", galgje:"Taal", sudoku:"Puzzels", woordzoeker:"Taal", memory:"Geheugen",
+  vieropeenrij:"Samen", boterkaaseieren:"Samen", mastermind:"Puzzels", rekensprint:"Rekenen", simon:"Geheugen", ruimterunner:"Actie", doolhof:"Puzzels",
+};
 
 const state = {
   player: JSON.parse(localStorage.getItem("speelplaneet-player") || "null"),
@@ -27,28 +32,131 @@ const state = {
   gameCleanup: null,
   syncTimer: 0,
   battleshipJoin: null,
+  turnGameJoin: null,
+  playStartedAt: 0,
+  levelCompleted: false,
+  parentSettings: null,
+  category:"Alles",
+  gamePause:null,
+  gameResume:null,
+  gamePaused:false,
+  tournament:null,
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
 const playerProgressKey = name => `speelplaneet-progress-${String(name || "").normalize("NFKC").trim().toLocaleLowerCase("nl-BE")}`;
+const parentSettingsKey = name => `speelplaneet-parent-settings-${String(name || "").normalize("NFKC").trim().toLocaleLowerCase("nl-BE")}`;
 if (state.player) {
   const savedPlayerProgress = localStorage.getItem(playerProgressKey(state.player.name));
   if (savedPlayerProgress) state.progress = JSON.parse(savedPlayerProgress);
+  state.parentSettings = JSON.parse(localStorage.getItem(parentSettingsKey(state.player.name)) || "null");
 }
 state.progress.levels ||= {};
 state.progress.runnerHighscores ||= JSON.parse(localStorage.getItem("speelplaneet-runner-highscores") || "{}");
+state.progress.stats ||= {};
+state.progress.milestoneAwards ||= [];
+state.progress.activity ||= {};
+state.progress.missionClaims ||= [];
+state.progress.favorites ||= [];
+state.progress.favoritesUpdatedAt ||= 0;
+state.progress.recentGame ||= "";
+state.progress.recentGameUpdatedAt ||= 0;
+state.progress.seasons ||= {};
+state.progress.support ||= {};
 
 const inviteParams = new URLSearchParams(window.location.search);
+const levelTestMode = inviteParams.get("testlevels") === "1";
+let levelTestOpened = false;
 const pendingInvite = {
   game: inviteParams.get("game"),
   code: inviteParams.get("code"),
 };
 
 const $ = (selector) => document.querySelector(selector);
+const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" })[character]);
 const loginView = $("#login-view");
 const dashboardView = $("#dashboard-view");
 const homeScreen = $("#home-screen");
 const gameScreen = $("#game-screen");
 const stage = $("#game-stage");
+const accessibilityDefaults = { largeText:false, highContrast:false, reducedMotion:false, colorSymbols:false, sound:true, music:false, speech:false };
+let accessibility = { ...accessibilityDefaults, ...JSON.parse(localStorage.getItem("speelplaneet-accessibility") || "{}") };
+let audioContext = null, musicNodes = [];
+let lastErrorReport = 0;
+
+function applyAccessibility() {
+  document.body.classList.toggle("large-text", accessibility.largeText);
+  document.body.classList.toggle("high-contrast", accessibility.highContrast);
+  document.body.classList.toggle("reduced-motion", accessibility.reducedMotion);
+  document.body.classList.toggle("color-symbols", accessibility.colorSymbols);
+  document.querySelectorAll("[data-accessibility]").forEach(input => { input.checked = Boolean(accessibility[input.dataset.accessibility]); });
+}
+
+function ensureAudio() {
+  audioContext ||= new (window.AudioContext || window.webkitAudioContext)();
+  if (audioContext.state === "suspended") audioContext.resume();
+  return audioContext;
+}
+
+function playUiSound() {
+  if (!accessibility.sound) return;
+  try {
+    const context = ensureAudio(), oscillator = context.createOscillator(), gain = context.createGain();
+    oscillator.frequency.value = 520; gain.gain.setValueAtTime(.025, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .12);
+    oscillator.connect(gain).connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .13);
+  } catch {}
+}
+
+function setMusic(active) {
+  musicNodes.forEach(node => { try { node.stop(); } catch {} }); musicNodes = [];
+  if (!active) return;
+  try {
+    const context = ensureAudio(), gain = context.createGain(); gain.gain.value = .012; gain.connect(context.destination);
+    [174,261].forEach(frequency => { const oscillator=context.createOscillator();oscillator.type="sine";oscillator.frequency.value=frequency;oscillator.connect(gain);oscillator.start();musicNodes.push(oscillator); });
+  } catch {}
+}
+
+applyAccessibility();
+
+function setParentSettings(settings) {
+  if (!settings) return;
+  state.parentSettings = settings;
+  if (state.player?.name) localStorage.setItem(parentSettingsKey(state.player.name), JSON.stringify(settings));
+}
+
+function reportClientError(type, message, context = "") {
+  if (!state.authToken || Date.now() - lastErrorReport < 60000) return;
+  lastErrorReport = Date.now();
+  fetch("/api/log-error", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${state.authToken}` },
+    body:JSON.stringify({ type, message:String(message || ""), context }),
+  }).catch(() => {});
+}
+
+window.addEventListener("error", event => reportClientError("javascript", event.message, `${event.filename || ""}:${event.lineno || 0}`));
+window.addEventListener("unhandledrejection", event => reportClientError("promise", event.reason?.message || event.reason || "Onbekende fout"));
+
+function clearGamePause() {
+  state.gamePause = null; state.gameResume = null; state.gamePaused = false;
+  const button = $("#pause-game");
+  button.classList.add("hidden"); button.textContent = "⏸ Pauze";
+}
+
+function configureGamePause(pause, resume) {
+  state.gamePause = pause; state.gameResume = resume; state.gamePaused = false;
+  $("#pause-game").classList.remove("hidden");
+}
+
+function pauseActiveGame() {
+  if (!state.gamePause || state.gamePaused || state.gamePause() === false) return false;
+  state.gamePaused = true; $("#pause-game").textContent = "▶ Hervat"; return true;
+}
+
+function resumeActiveGame() {
+  if (!state.gameResume || !state.gamePaused || state.gameResume() === false) return false;
+  state.gamePaused = false; $("#pause-game").textContent = "⏸ Pauze"; return true;
+}
 
 function saveProgress() {
   localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
@@ -67,13 +175,197 @@ function mergeProgress(local, remote) {
   const maxMap = (left = {}, right = {}) => Object.fromEntries(
     [...new Set([...Object.keys(left), ...Object.keys(right)])].map(key => [key, Math.max(Number(left[key]) || 0, Number(right[key]) || 0)])
   );
+  const statKeys = [...new Set([...Object.keys(local?.stats || {}), ...Object.keys(remote?.stats || {})])];
+  const activityKeys = [...new Set([...Object.keys(local?.activity || {}), ...Object.keys(remote?.activity || {})])];
   return {
     stars: Math.max(Number(local?.stars) || 0, Number(remote?.stars) || 0),
     completed: [...new Set([...(local?.completed || []), ...(remote?.completed || [])])],
     gameWins: maxMap(local?.gameWins, remote?.gameWins),
     levels: maxMap(local?.levels, remote?.levels),
     runnerHighscores: maxMap(local?.runnerHighscores, remote?.runnerHighscores),
+    stats: Object.fromEntries(statKeys.map(key => [key, maxMap(local?.stats?.[key], remote?.stats?.[key])])),
+    milestoneAwards: [...new Set([...(local?.milestoneAwards || []), ...(remote?.milestoneAwards || [])])],
+    activity: Object.fromEntries(activityKeys.map(key => [key, [...new Set([...(local?.activity?.[key] || []), ...(remote?.activity?.[key] || [])])]])),
+    missionClaims: [...new Set([...(local?.missionClaims || []), ...(remote?.missionClaims || [])])],
+    favorites:Number(local?.favoritesUpdatedAt || 0) >= Number(remote?.favoritesUpdatedAt || 0) ? [...new Set(local?.favorites || [])] : [...new Set(remote?.favorites || [])],
+    favoritesUpdatedAt:Math.max(Number(local?.favoritesUpdatedAt) || 0, Number(remote?.favoritesUpdatedAt) || 0),
+    recentGame:Number(local?.recentGameUpdatedAt || 0) >= Number(remote?.recentGameUpdatedAt || 0) ? (local?.recentGame || "") : (remote?.recentGame || ""),
+    recentGameUpdatedAt:Math.max(Number(local?.recentGameUpdatedAt) || 0, Number(remote?.recentGameUpdatedAt) || 0),
+    seasons:mergeSeasonProgress(local?.seasons, remote?.seasons),
+    support:mergeSupportProgress(local?.support, remote?.support),
   };
+}
+
+function mergeSeasonProgress(left = {}, right = {}) {
+  const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])];
+  return Object.fromEntries(keys.map(key => [key, {
+    games:[...new Set([...(left[key]?.games || []), ...(right[key]?.games || [])])],
+    rewards:[...new Set([...(left[key]?.rewards || []), ...(right[key]?.rewards || [])])],
+  }]));
+}
+
+function mergeSupportProgress(left = {}, right = {}) {
+  const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])];
+  return Object.fromEntries(keys.map(key => {
+    const local = left[key] || {}, remote = right[key] || {};
+    const newest = Number(local.updatedAt || 0) >= Number(remote.updatedAt || 0) ? local : remote;
+    return [key,{
+      streak:Math.max(0,Number(newest.streak) || 0),
+      hints:Math.max(Number(local.hints) || 0,Number(remote.hints) || 0),
+      updatedAt:Math.max(Number(local.updatedAt) || 0,Number(remote.updatedAt) || 0),
+    }];
+  }));
+}
+
+const localDateKey = date => {
+  const year = date.getFullYear(), month = String(date.getMonth() + 1).padStart(2, "0"), day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+const recentActivityKeys = days => Array.from({length:days}, (_, offset) => {
+  const date = new Date(); date.setHours(12,0,0,0); date.setDate(date.getDate() - offset); return localDateKey(date);
+});
+const weekKey = date => {
+  const monday = new Date(date); monday.setHours(12,0,0,0);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  return localDateKey(monday);
+};
+
+const familyChallengeStorageKey = "speelplaneet-family-challenge";
+const familyChallengeTarget = 20;
+function loadFamilyChallenge() {
+  let challenge = {};
+  try { challenge = JSON.parse(localStorage.getItem(familyChallengeStorageKey) || "{}"); } catch {}
+  const currentWeek = weekKey(new Date());
+  if (challenge.week !== currentWeek) challenge = { week:currentWeek, stars:0, contributors:{} };
+  challenge.stars = Math.max(0, Number(challenge.stars) || 0);
+  challenge.contributors ||= {};
+  return challenge;
+}
+function saveFamilyChallenge(challenge) {
+  localStorage.setItem(familyChallengeStorageKey, JSON.stringify(challenge));
+}
+function addFamilyStar() {
+  const challenge = loadFamilyChallenge();
+  const playerName = String(state.player?.name || "Ruimteverkenner").trim().slice(0,24);
+  challenge.stars += 1;
+  challenge.contributors[playerName] = (Number(challenge.contributors[playerName]) || 0) + 1;
+  saveFamilyChallenge(challenge);
+  return challenge.stars;
+}
+function renderFamilyChallenge() {
+  const challenge = loadFamilyChallenge();
+  saveFamilyChallenge(challenge);
+  const visibleStars = Math.min(challenge.stars, familyChallengeTarget);
+  $("#family-stars").textContent = visibleStars;
+  $("#family-progress").style.width = `${visibleStars / familyChallengeTarget * 100}%`;
+  $(".family-progress-track").setAttribute("aria-valuenow", String(visibleStars));
+  const preferredNames = ["Ellie","Mila","Mats"];
+  const names = [...new Set([...preferredNames, ...Object.keys(challenge.contributors)])];
+  $("#family-contributors").innerHTML = names.map(name => {
+    const count = Number(challenge.contributors[name]) || 0;
+    const safeName = escapeHtml(name);
+    return `<div class="family-contributor"><span>${escapeHtml(name.slice(0,1).toUpperCase())}</span>${safeName}: ${count} ⭐</div>`;
+  }).join("");
+  const rewards = [
+    { at:5, icon:"🛰️", name:"Familiesatelliet" },
+    { at:12, icon:"☄️", name:"Kometenmedaille" },
+    { at:20, icon:"🚀", name:"Sterrenmotor" },
+  ];
+  $("#family-rewards").innerHTML = rewards.map(reward => {
+    const unlocked = challenge.stars >= reward.at;
+    return `<div class="family-reward ${unlocked ? "" : "locked"}"><span>${unlocked ? reward.icon : "🔒"}</span><div><strong>${reward.name}</strong><small>${unlocked ? "Samen ontdekt!" : `Bij ${reward.at} sterren`}</small></div></div>`;
+  }).join("");
+}
+
+const seasonWorlds = {
+  spring:{ title:"Bloesemnevel", description:"Laat nieuwe ruimtebloemen groeien door verschillende spellen te ontdekken.", rewards:[["🌱","Sterrenzaad"],["🌸","Nevelbloesem"],["🦋","Kosmische vlinder"]] },
+  summer:{ title:"Zomerse sterrenbaai", description:"Vaar langs zonnige planeten door verschillende spellen te ontdekken.", rewards:[["🐚","Maanschelp"],["☀️","Zonnekompas"],["🏝️","Sterreneiland"]] },
+  autumn:{ title:"Kometenbos", description:"Verzamel warme ruimtekleuren door verschillende spellen te ontdekken.", rewards:[["🍂","Maanblad"],["🦊","Sterrenvos"],["🌠","Herfstkomeet"]] },
+  winter:{ title:"IJsplaneet Aurora", description:"Ontsteek het poollicht door verschillende spellen te ontdekken.", rewards:[["❄️","IJskristal"],["⛄","Ruimtesneeuwman"],["🌌","Noorderlicht"]] },
+};
+function currentSeason() {
+  const now = new Date(), month = now.getMonth(), year = now.getFullYear();
+  const id = month >= 2 && month <= 4 ? "spring" : month >= 5 && month <= 7 ? "summer" : month >= 8 && month <= 10 ? "autumn" : "winter";
+  const seasonYear = id === "winter" && month === 11 ? year + 1 : year;
+  return { id, key:`${id}-${seasonYear}`, ...seasonWorlds[id] };
+}
+function addSeasonProgress(gameId) {
+  const season = currentSeason();
+  const progress = state.progress.seasons[season.key] ||= { games:[], rewards:[] };
+  if (!progress.games.includes(gameId)) progress.games.push(gameId);
+  const newlyUnlocked = [];
+  [3,6,10].forEach((target,index) => {
+    const rewardKey = `reward-${target}`;
+    if (progress.games.length >= target && !progress.rewards.includes(rewardKey)) {
+      progress.rewards.push(rewardKey);
+      state.progress.stars += 1;
+      newlyUnlocked.push(season.rewards[index][1]);
+    }
+  });
+  return newlyUnlocked;
+}
+function renderSeasonWorld() {
+  const season = currentSeason();
+  const progress = state.progress.seasons[season.key] ||= { games:[], rewards:[] };
+  document.body.dataset.season = season.id;
+  $("#season-title").textContent = season.title;
+  $("#season-description").textContent = season.description;
+  $("#season-eyebrow").textContent = `${season.id === "spring" ? "LENTE" : season.id === "summer" ? "ZOMER" : season.id === "autumn" ? "HERFST" : "WINTER"} · SEIZOENSWERELD`;
+  const count = Math.min(progress.games.length,10);
+  $("#season-progress").style.width = `${count * 10}%`;
+  $(".season-progress-track").setAttribute("aria-valuenow",String(count));
+  $("#season-missions").innerHTML = [3,6,10].map((target,index) => {
+    const unlocked = progress.games.length >= target;
+    const [icon,name] = season.rewards[index];
+    return `<div class="season-mission ${unlocked ? "" : "locked"}"><span>${unlocked ? icon : "🔒"}</span><div><strong>${name}</strong><small>${unlocked ? "Ontdekt!" : `${count} / ${target} spellen`}</small></div></div>`;
+  }).join("");
+  const archived = Object.values(state.progress.seasons).filter(item => item?.rewards?.length).reduce((sum,item) => sum + item.rewards.length,0);
+  $("#season-archive-count").textContent = archived ? `Je bewaart ${archived} seizoensbeloning${archived === 1 ? "" : "en"} in je verzameling.` : "Je eerste seizoensbeloning wacht na drie verschillende spellen.";
+}
+
+const tournamentStorageKey = "speelplaneet-family-tournament";
+const tournamentGames = ["sudoku","memory","mastermind","rekensprint","simon","woordzoeker"];
+function saveTournament() {
+  if (state.tournament) sessionStorage.setItem(tournamentStorageKey, JSON.stringify(state.tournament));
+  else sessionStorage.removeItem(tournamentStorageKey);
+}
+function tournamentGameForRound(round) {
+  return tournamentGames[round % tournamentGames.length];
+}
+function renderTournamentDialog() {
+  const tournament = state.tournament;
+  $("#tournament-setup").classList.toggle("hidden", Boolean(tournament));
+  $("#tournament-status").classList.toggle("hidden", !tournament);
+  if (!tournament) return;
+  const finished = tournament.round >= tournament.rounds;
+  $("#tournament-scoreboard").innerHTML = tournament.players.map(name =>
+    `<div class="tournament-score"><strong>${name}</strong><span>☄️ ${tournament.scores[name] || 0}</span></div>`).join("");
+  const nextPlayer = tournament.players[tournament.round % tournament.players.length];
+  const nextGame = games.find(game => game.id === tournamentGameForRound(tournament.round));
+  $("#tournament-player-avatar").textContent = finished ? "🏆" : nextPlayer.slice(0,1);
+  $("#tournament-round-label").textContent = finished ? "TOERNOOI VOLTOOID" : `RONDE ${tournament.round + 1} VAN ${tournament.rounds}`;
+  $("#tournament-next-player").textContent = finished ? "Samen de finish gehaald!" : `${nextPlayer} is aan de beurt`;
+  $("#tournament-next-game").textContent = finished
+    ? "Goed gespeeld! Alle kometenpunten horen bij deze vrolijke toernooimissie."
+    : `Geef het toestel door. De volgende uitdaging is ${nextGame.title}.`;
+  $("#tournament-next").classList.toggle("hidden", finished);
+  $("#stop-tournament").textContent = finished ? "Toernooi afsluiten" : "Toernooi stoppen";
+}
+function openTournamentDialog() {
+  renderTournamentDialog();
+  $("#tournament-dialog").showModal();
+}
+function finishTournamentRound(gameId) {
+  const tournament = state.tournament;
+  if (!tournament || tournamentGameForRound(tournament.round) !== gameId) return false;
+  const player = tournament.players[tournament.round % tournament.players.length];
+  tournament.scores[player] = (tournament.scores[player] || 0) + 1;
+  tournament.round += 1;
+  addFamilyStar();
+  saveTournament();
+  renderTournamentDialog();
+  $("#tournament-dialog").showModal();
+  return true;
 }
 
 function scheduleProgressSync() {
@@ -88,6 +380,8 @@ function scheduleProgressSync() {
         body: JSON.stringify({ progress: state.progress }),
       });
       if (!response.ok) throw new Error("sync");
+      const data = await response.json();
+      setParentSettings(data.settings);
       setSyncStatus("Gesynchroniseerd", true);
     } catch {
       setSyncStatus("Offline bewaard");
@@ -107,6 +401,7 @@ async function refreshCloudProgress() {
     if (!response.ok) throw new Error("sync");
     const data = await response.json();
     state.progress = mergeProgress(state.progress, data.progress);
+    setParentSettings(data.settings);
     localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
     setSyncStatus("Gesynchroniseerd", true);
     if (!homeScreen.classList.contains("hidden")) renderHome();
@@ -117,6 +412,7 @@ async function refreshCloudProgress() {
 }
 
 function unlockedLevel(gameId = state.activeGame) {
+  if (levelTestMode) return 100;
   return Math.min(100, Math.max(1, state.progress.levels[gameId] || 1));
 }
 
@@ -178,10 +474,15 @@ function addLevelBar(gameId) {
       <select data-level-select aria-label="Kies niveau">${Array.from({length:unlocked},(_,index)=>`<option value="${index+1}" ${index+1===level?"selected":""}>${index+1} / 100</option>`).join("")}</select>
     </label>
     <span>${difficultyBand(level)}</span>
+    ${[10,25,50,75,100].includes(level) ? '<strong class="milestone-badge">🏅 MIJLPAAL</strong>' : ""}
     <small class="mission-code" title="Unieke levelcode">${missionCode(gameId, level)}</small>
     <div class="level-dots">${[20,40,60,80,100].map(mark => `<i class="${level >= mark ? "reached" : ""}"></i>`).join("")}</div>
     <button class="level-nav-button level-next-button" data-level-next ${level >= unlocked ? "disabled" : ""}>Volgende →</button>
+    ${levelTestMode ? '<strong class="level-test-badge">TESTMODUS</strong>' : ""}
   </div>`);
+  const milestone = SpeelplaneetLevels.milestone(level);
+  if (milestone) panel.querySelector(".game-level-bar").insertAdjacentHTML("afterend",
+    `<div class="milestone-mission"><strong>🏅 ${milestone.title}</strong><span>${milestone.description}</span><small>Eerste voltooiing: 2 bonussterren</small></div>`);
   panel.querySelector("[data-level-prev]").addEventListener("click", () => {
     state.selectedLevels[gameId] = Math.max(1, gameLevel(gameId) - 1);
     openGame(gameId);
@@ -194,12 +495,66 @@ function addLevelBar(gameId) {
     state.selectedLevels[gameId] = Number(event.target.value);
     openGame(gameId);
   });
+  renderAdaptiveHelp(gameId, panel);
+}
+
+const adaptiveTips = {
+  zeeslag:"Probeer in een dambordpatroon te schieten. Zo vind je lange schepen met minder schoten.",
+  galgje:"Begin met klinkers zoals A, E en O en kijk daarna welke lettercombinaties bij de hint passen.",
+  sudoku:"Zoek eerst de rij, kolom of het blok waarin al de meeste cijfers staan.",
+  woordzoeker:"Zoek eerst de beginletter en kijk daarna horizontaal, verticaal en schuin.",
+  memory:"Noem ieder symbool zachtjes en onthoud samen met de plek ook de rij.",
+  vieropeenrij:"Kijk vóór je zet of jij kunt winnen én of je een rij van de tegenstander moet blokkeren.",
+  boterkaaseieren:"Het middelste vak en de hoeken geven meestal de meeste mogelijkheden.",
+  mastermind:"Verander één kleur tegelijk. Zo ontdek je welke wijziging de aanwijzing beter maakt.",
+  rekensprint:"Splits een moeilijke som op in een gemakkelijk tiental en het stukje dat overblijft.",
+  simon:"Zeg de kleuren in een ritme hardop; korte groepjes zijn makkelijker te onthouden.",
+  ruimterunner:"Spring iets vóór de robot bij je is en laat de knop daarna los om rustig te landen.",
+  doolhof:"Kijk welke muur open is en probeer eerst één richting rustig te volgen. Je kunt altijd terug.",
+};
+function supportEntry(gameId) {
+  return state.progress.support[gameId] ||= { streak:0,hints:0,updatedAt:0 };
+}
+function recordUnfinishedAttempt(gameId) {
+  if (!gameId || state.levelCompleted || state.tournament) return;
+  const support = supportEntry(gameId);
+  support.streak = Math.min(10,support.streak + 1);
+  support.updatedAt = Date.now();
+  saveProgress();
+}
+function noteStruggle(gameId) {
+  if (state.tournament) return;
+  const support = supportEntry(gameId);
+  support.streak = Math.min(10,support.streak + 1);
+  support.updatedAt = Date.now();
+  saveProgress();
+  const panel = stage.querySelector(".game-panel");
+  if (panel) renderAdaptiveHelp(gameId,panel);
+}
+function renderAdaptiveHelp(gameId,panel) {
+  const support = supportEntry(gameId);
+  if (support.streak < 2) return;
+  const automaticTip = support.streak >= 4;
+  panel.querySelector(".adaptive-help")?.remove();
+  panel.querySelector(".game-level-bar")?.insertAdjacentHTML("afterend",`<aside class="adaptive-help" aria-live="polite">
+    <span>🛟</span><div><strong>${automaticTip ? "Extra hulp staat klaar" : "Zullen we samen even kijken?"}</strong>
+    <p>${automaticTip ? adaptiveTips[gameId] : "Je hoeft niet te haasten. Een kleine tip kan helpen zonder je niveau te veranderen."}</p></div>
+    ${automaticTip ? "" : '<button class="mini-button" type="button" data-adaptive-hint>Geef me een tip</button>'}
+  </aside>`);
+  panel.querySelector("[data-adaptive-hint]")?.addEventListener("click",event => {
+    event.currentTarget.remove();
+    const paragraph = panel.querySelector(".adaptive-help p");
+    paragraph.textContent = adaptiveTips[gameId];
+    support.hints += 1; support.updatedAt = Date.now(); saveProgress();
+    if (accessibility.speech && "speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(adaptiveTips[gameId]));
+  });
 }
 
 function toast(message) {
   const box = $("#toast");
   box.textContent = message;
   box.classList.add("show");
+  playUiSound();
   setTimeout(() => box.classList.remove("show"), 2500);
 }
 
@@ -222,6 +577,7 @@ async function handlePendingInvite() {
     state.inviteHandled ||
     !state.player ||
     !state.supabase ||
+    state.parentSettings?.paused ||
     !["zeeslag", "galgje", "vieropeenrij", "boterkaaseieren"].includes(pendingInvite.game) ||
     !/^[A-Z]{3}-[0-9]{3}$/i.test(pendingInvite.code || "")
   ) return;
@@ -229,8 +585,11 @@ async function handlePendingInvite() {
   openGame(pendingInvite.game);
   if (pendingInvite.game === "zeeslag" && state.battleshipJoin) {
     await state.battleshipJoin(pendingInvite.code);
+  } else if (state.turnGameJoin) {
+    await state.turnGameJoin(pendingInvite.code);
   } else {
-    await joinRoom(pendingInvite.code, pendingInvite.game);
+    state.inviteHandled = false;
+    return;
   }
   if (state.room) {
     document.querySelector("[data-room-details]")?.classList.remove("hidden");
@@ -338,13 +697,22 @@ function showDashboard() {
   $("#avatar").textContent = state.player.name[0].toUpperCase();
   setSyncStatus(state.authToken ? "Synchroniseren…" : "Op dit apparaat", false);
   renderHome();
+  const testGame = inviteParams.get("game");
+  const testLevel = Number(inviteParams.get("level"));
+  if (!levelTestOpened && levelTestMode && games.some(game => game.id === testGame) && testLevel >= 1 && testLevel <= 100) {
+    levelTestOpened = true;
+    state.selectedLevels[testGame] = Math.floor(testLevel);
+    openGame(testGame);
+  }
 }
 
 function renderHome() {
+  if (!gameScreen.classList.contains("hidden")) recordUnfinishedAttempt(state.activeGame);
   if (state.gameCleanup) {
     state.gameCleanup();
     state.gameCleanup = null;
   }
+  clearGamePause();
   homeScreen.classList.remove("hidden");
   gameScreen.classList.add("hidden");
   const stars = state.progress.stars || 0;
@@ -355,41 +723,135 @@ function renderHome() {
   $("#level-title").textContent = titles[Math.min(level - 1, titles.length - 1)];
   $("#progress-stars").textContent = stars % 5;
   $("#level-progress").style.width = `${(stars % 5) * 20}%`;
-  $("#daily-count").textContent = `${Math.min(new Set(state.progress.completed).size, 2)} / 2`;
-  $("#game-grid").innerHTML = games.map(game => `
+  const today = localDateKey(new Date());
+  const dailyDone = (state.progress.activity[today] || []).length;
+  const weeklyDone = recentActivityKeys(7).reduce((sum, key) => sum + (state.progress.activity[key] || []).length, 0);
+  $("#daily-count").textContent = `${Math.min(dailyDone, 2)} / 2`;
+  $("#weekly-count").textContent = `${Math.min(weeklyDone, 7)} / 7`;
+  $("#daily-mission-text").textContent = state.progress.missionClaims.includes(`daily-${today}`) ? "Bonusster verdiend — morgen verschijnt een nieuwe missie." : "Verdien een bonusster zonder tijdsdruk.";
+  const weekClaim = `weekly-${weekKey(new Date())}`;
+  $("#weekly-mission-text").textContent = state.progress.missionClaims.includes(weekClaim) ? "Drie bonussterren verdiend!" : "Verdien drie bonussterren deze week.";
+  renderFamilyChallenge();
+  renderSeasonWorld();
+  const rewards = [
+    ["🪖","Ruimtehelm",5],["🌙","Maan",15],["🏅","Sterrenmedaille",30],["🛸","Ruimteschip",50],
+    ["🪐","Ringplaneet",75],["👨‍🚀","Gouden ruimtepak",100],["🏆","Kosmische trofee",150],["🌌","Eigen sterrenstelsel",250],
+  ];
+  $("#reward-shelf").innerHTML = rewards.map(([icon,name,needed]) => `<div class="${stars >= needed ? "unlocked" : "locked"}"><span>${stars >= needed ? icon : "🔒"}</span><strong>${name}</strong><small>${stars >= needed ? "Ontdekt!" : `${needed} sterren`}</small></div>`).join("");
+  const continueButton = $("#continue-game");
+  const recent = games.find(game => game.id === state.progress.recentGame);
+  continueButton.classList.toggle("hidden", !recent);
+  if (recent) continueButton.textContent = `Verder met ${recent.title}`;
+  const gameStats = gameId => {
+    const stats = state.progress.stats[gameId];
+    if (!stats?.attempts) return "";
+    const minutes = Math.round((stats.totalSeconds || 0) / 60);
+    const success = Math.round(((stats.wins || 0) / stats.attempts) * 100);
+    return `<small class="game-stat">${stats.wins || 0} voltooid · ${stats.attempts} pogingen · ${success}% succes · ${minutes} min</small>`;
+  };
+  const categories = ["Alles","Taal","Rekenen","Puzzels","Geheugen","Samen","Actie"];
+  $("#category-filters").innerHTML = categories.map(category => `<button class="${state.category === category ? "active" : ""}" data-category="${category}">${category}</button>`).join("");
+  document.querySelectorAll("[data-category]").forEach(button => button.addEventListener("click", () => { state.category=button.dataset.category;renderHome(); }));
+  if (state.parentSettings?.paused) {
+    $("#game-grid").innerHTML = `<div class="paused-profile-card"><span>⏸️</span><div><h3>Dit profiel is gepauzeerd</h3><p>Een ouder kan het profiel weer vrijgeven via Ouderomgeving.</p></div></div>`;
+    return;
+  }
+  const orderedGames = games.filter(game => state.category === "Alles" || gameCategories[game.id] === state.category)
+    .sort((left,right) => Number(state.progress.favorites.includes(right.id)) - Number(state.progress.favorites.includes(left.id)));
+  $("#game-grid").innerHTML = orderedGames.map(game => `
+    <div class="game-card-wrap">
+    <button class="favorite-button ${state.progress.favorites.includes(game.id) ? "active" : ""}" data-favorite="${game.id}" aria-label="${state.progress.favorites.includes(game.id) ? "Verwijder uit" : "Voeg toe aan"} favorieten">★</button>
     <button class="game-card" data-game="${game.id}" aria-label="Speel ${game.title}">
       <div class="game-icon icon-${game.color}">${game.icon}</div>
       <h4>${game.title}</h4>
       <p>${game.description}</p>
+      ${gameStats(game.id)}
       <div class="card-footer"><span>${game.modes}</span><span class="play-arrow">→</span></div>
-    </button>`).join("");
+    </button></div>`).join("");
   document.querySelectorAll("[data-game]").forEach(button => {
     button.addEventListener("click", () => openGame(button.dataset.game));
   });
+  document.querySelectorAll("[data-favorite]").forEach(button => button.addEventListener("click", () => {
+    const id = button.dataset.favorite;
+    state.progress.favorites = state.progress.favorites.includes(id)
+      ? state.progress.favorites.filter(gameId => gameId !== id)
+      : [...state.progress.favorites, id];
+    state.progress.favoritesUpdatedAt = Date.now();
+    saveProgress(); renderHome();
+  }));
 }
 
 function completeGame(gameId, message) {
+  if (state.levelCompleted) return;
+  state.levelCompleted = true;
+  if (finishTournamentRound(gameId)) {
+    toast(`${message} ☄️ Kometenpunt verdiend voor het gezinstoernooi!`);
+    return;
+  }
+  const adaptiveSupport = supportEntry(gameId);
+  adaptiveSupport.streak = 0;
+  adaptiveSupport.updatedAt = Date.now();
   state.progress.stars += 1;
   state.progress.completed.push(gameId);
   state.progress.gameWins[gameId] = (state.progress.gameWins[gameId] || 0) + 1;
+  const today = localDateKey(new Date());
+  state.progress.activity[today] ||= [];
+  if (!state.progress.activity[today].includes(gameId)) state.progress.activity[today].push(gameId);
+  let missionBonus = 0;
+  if (state.progress.activity[today].length >= 2 && !state.progress.missionClaims.includes(`daily-${today}`)) {
+    state.progress.missionClaims.push(`daily-${today}`); missionBonus += 1;
+  }
+  const weekClaim = `weekly-${weekKey(new Date())}`;
+  const weeklyDone = recentActivityKeys(7).reduce((sum,key) => sum + (state.progress.activity[key] || []).length, 0);
+  if (weeklyDone >= 7 && !state.progress.missionClaims.includes(weekClaim)) {
+    state.progress.missionClaims.push(weekClaim); missionBonus += 3;
+  }
+  state.progress.stars += missionBonus;
+  const familyStars = addFamilyStar();
+  const seasonRewards = addSeasonProgress(gameId);
   const completedLevel = gameLevel(gameId);
+  const stats = state.progress.stats[gameId] ||= { attempts:0, wins:0, totalSeconds:0 };
+  stats.wins++;
+  stats.totalSeconds += Math.max(1, Math.round((Date.now() - state.playStartedAt) / 1000));
+  const milestoneKey = `${gameId}-${completedLevel}`;
+  const milestone = [10,25,50,75,100].includes(completedLevel) && !state.progress.milestoneAwards.includes(milestoneKey);
+  if (milestone) {
+    state.progress.milestoneAwards.push(milestoneKey);
+    state.progress.stars += 2;
+  }
   const previouslyUnlocked = unlockedLevel(gameId);
   state.selectedLevels[gameId] = completedLevel;
   if (completedLevel >= previouslyUnlocked) state.progress.levels[gameId] = Math.min(100, previouslyUnlocked + 1);
   saveProgress();
   addLevelBar(gameId);
-  toast(completedLevel < 100 && completedLevel >= previouslyUnlocked
+  toast(missionBonus ? `${message} ☀️ Missiebonus: ${missionBonus} extra ster${missionBonus === 1 ? "" : "ren"}!`
+    : milestone ? `${message} 🏅 Mijlpaal gehaald: 3 sterren verdiend!`
+    : seasonRewards.length ? `${message} ${seasonRewards[0]} Nieuwe seizoensbeloning ontdekt!`
+    : [5,12,20].includes(familyStars) ? `${message} 🚀 Jullie gezin heeft samen een nieuwe beloning ontdekt!`
+    : completedLevel < 100 && completedLevel >= previouslyUnlocked
     ? `${message} ⭐ Niveau ${completedLevel + 1} vrijgespeeld — tik op Volgende!`
     : `${message} ⭐ Goed gespeeld!`);
 }
 
 function openGame(id) {
+  if (state.parentSettings?.paused) return toast("Dit profiel is door een ouder gepauzeerd.");
+  if (!gameScreen.classList.contains("hidden")) recordUnfinishedAttempt(state.activeGame);
   if (state.gameCleanup) {
     state.gameCleanup();
     state.gameCleanup = null;
   }
+  clearGamePause();
   leaveRoom();
   state.activeGame = id;
+  state.progress.recentGame = id;
+  state.progress.recentGameUpdatedAt = Date.now();
+  state.playStartedAt = Date.now();
+  state.levelCompleted = false;
+  if (!levelTestMode && !state.tournament) {
+    const stats = state.progress.stats[id] ||= { attempts:0, wins:0, totalSeconds:0 };
+    stats.attempts++;
+    saveProgress();
+  }
   homeScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
   if (id === "galgje") renderHangman();
@@ -403,14 +865,72 @@ function openGame(id) {
   if (id === "rekensprint") renderMathSprint();
   if (id === "simon") renderSimon();
   if (id === "ruimterunner") renderSpaceRunner();
+  if (id === "doolhof") renderMaze();
+  if (state.tournament && tournamentGameForRound(state.tournament.round) === id) {
+    const tournamentPlayer = state.tournament.players[state.tournament.round % state.tournament.players.length];
+    stage.insertAdjacentHTML("afterbegin", `<div class="tournament-game-banner" role="status"><span>☄️</span><div><small>GEZINSTOERNOOI · RONDE ${state.tournament.round + 1} VAN ${state.tournament.rounds}</small><strong>${tournamentPlayer} speelt deze ronde</strong></div></div>`);
+  }
   addLevelBar(id);
+  if (accessibility.speech && "speechSynthesis" in window) {
+    speechSynthesis.cancel();
+    const game = games.find(item => item.id === id);
+    speechSynthesis.speak(new SpeechSynthesisUtterance(`${game.title}. ${game.description}`));
+  }
+  if (!localStorage.getItem(`speelplaneet-tutorial-${id}`)) {
+    const tutorials = {
+      zeeslag:"Plaats eerst alle vijf schepen. Schiet daarna om de beurt op het bord van je tegenstander.",
+      galgje:"Tik letters aan om samen het verborgen woord te ontdekken. De hint helpt je op weg.",
+      sudoku:"Vul 1 tot en met 4 precies één keer in iedere rij, kolom en ieder blok.",
+      woordzoeker:"Tik de letters van elk woord achter elkaar aan. Woorden kunnen verschillende richtingen uitgaan.",
+      memory:"Draai twee kaartjes om en onthoud waar ieder ruimtesymbool ligt.",
+      vieropeenrij:"Kies een kolom en maak eerder dan je tegenstander een rij van vier.",
+      boterkaaseieren:"Maak met jouw teken als eerste drie op een rij.",
+      mastermind:"Kies een kleurcode en gebruik de gouden en witte aanwijzingen.",
+      rekensprint:"Vul het antwoord in en druk op Controleer. Rustig nadenken mag.",
+      simon:"Bekijk de lichtjes en tik daarna precies dezelfde reeks.",
+      ruimterunner:"Spring over robots en buk onder ufo's. De snelheid groeit heel geleidelijk.",
+      doolhof:"Breng de raket naar de planeet. Gebruik de pijlen of veeg niet: één rustige tik per stap werkt het best.",
+    };
+    $("#tutorial-title").textContent = `Zo speel je ${games.find(game => game.id === id)?.title}`;
+    $("#tutorial-text").textContent = tutorials[id];
+    $("#tutorial-dialog").dataset.game = id;
+    $("#tutorial-dialog").showModal();
+  }
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+$("#continue-game").addEventListener("click", () => {
+  if (state.progress.recentGame) openGame(state.progress.recentGame);
+});
+try { state.tournament = JSON.parse(sessionStorage.getItem(tournamentStorageKey) || "null"); } catch { state.tournament = null; }
+$("#family-tournament").addEventListener("click", openTournamentDialog);
+$("#close-tournament").addEventListener("click", () => $("#tournament-dialog").close());
+$("#start-tournament").addEventListener("click", () => {
+  const players = [...document.querySelectorAll('[name="tournament-player"]:checked')].map(input => input.value);
+  if (players.length < 2) return toast("Kies minstens twee spelers voor het gezinstoernooi.");
+  const rounds = Number($("#tournament-rounds").value);
+  state.tournament = { players, rounds, round:0, scores:Object.fromEntries(players.map(name => [name,0])) };
+  saveTournament();
+  renderTournamentDialog();
+});
+$("#tournament-next").addEventListener("click", () => {
+  if (!state.tournament || state.tournament.round >= state.tournament.rounds) return;
+  const gameId = tournamentGameForRound(state.tournament.round);
+  $("#tournament-dialog").close();
+  openGame(gameId);
+});
+$("#stop-tournament").addEventListener("click", () => {
+  state.tournament = null;
+  saveTournament();
+  $("#tournament-dialog").close();
+  renderHome();
+});
+
 function sidePanel(title, text, code = true) {
+  const multiplayerDisabled = code && state.parentSettings?.multiplayerEnabled === false;
   return `<aside class="side-panel">
     <p class="eyebrow">SAMEN SPELEN</p><h3>${title}</h3><p>${text}</p>
-    ${code ? `<div class="online-actions">
+    ${multiplayerDisabled ? '<div class="online-disabled">🔒 Online samenspelen is uitgeschakeld in de ouderomgeving.</div>' : code ? `<div class="online-actions">
       <button class="mini-button" data-create-room>Maak een kamer</button>
       <span class="online-or">of</span>
       <div class="join-form"><input data-join-input maxlength="7" placeholder="ABC-123" aria-label="Joincode" /><button data-join-room>Meedoen</button></div>
@@ -419,6 +939,7 @@ function sidePanel(title, text, code = true) {
         <div class="join-code" data-room-code>---</div>
         <button class="mini-button" data-copy-room>Kopieer joincode</button>
         <button class="whatsapp-button" data-share-whatsapp>Deel via WhatsApp</button>
+        <button class="mini-button hidden" data-forfeit>Geef deze partij op</button>
         <button class="mini-button hidden" data-rematch>Speel een revanche</button>
         <div class="connection-status" data-connection-status><i></i><span>Verbonden</span></div>
         <p class="online-status" data-room-status>Wachten op de tweede speler…</p>
@@ -462,6 +983,7 @@ function wireBattleshipMultiplayer(getFleet, applyGameState) {
   const join = document.querySelector("[data-join-room]");
   const copy = document.querySelector("[data-copy-room]");
   const share = document.querySelector("[data-share-whatsapp]");
+  const forfeit = document.querySelector("[data-forfeit]");
   const rematch = document.querySelector("[data-rematch]");
   let pollTimer = 0;
   const request = async (method, body) => {
@@ -482,7 +1004,16 @@ function wireBattleshipMultiplayer(getFleet, applyGameState) {
     updateRoomPanel(room);
     document.querySelector("[data-room-details]")?.classList.remove("hidden");
     applyGameState(room.game_state);
-    rematch?.classList.toggle("hidden",room.game_state.phase!=="finished");
+    const finished = room.game_state.phase === "finished";
+    forfeit?.classList.toggle("hidden", finished || !room.guest_id);
+    rematch?.classList.toggle("hidden", !finished || !room.guest_id);
+    if (finished && room.game_state.rematchReady?.[room.role]) {
+      rematch.textContent = "Wachten op akkoord…";
+      rematch.disabled = true;
+    } else if (rematch) {
+      rematch.textContent = "Speel een revanche";
+      rematch.disabled = false;
+    }
   };
   const startPolling = () => {
     clearInterval(pollTimer);
@@ -503,6 +1034,7 @@ function wireBattleshipMultiplayer(getFleet, applyGameState) {
     ROOM_NOT_FOUND:"Deze kamer bestaat niet meer.",
     ROOM_FULL:"Deze kamer heeft al twee spelers.",
     STALE_STATE:"De spelstand veranderde. Probeer je zet opnieuw.",
+    MULTIPLAYER_DISABLED:"Online samenspelen is uitgeschakeld in de ouderomgeving.",
   }[error.code]||"Online zeeslag lukt nu niet. Probeer opnieuw.");
 
   create.addEventListener("click",async()=>{
@@ -522,12 +1054,135 @@ function wireBattleshipMultiplayer(getFleet, applyGameState) {
   join.addEventListener("click",()=>joinCode(document.querySelector("[data-join-input]").value));
   copy.addEventListener("click",async()=>{if(!state.room)return;try{await navigator.clipboard.writeText(state.room.join_code);}catch{}toast("Joincode gekopieerd!");});
   share.addEventListener("click",()=>{if(!state.room)return;const url=`https://speelplaneet.vercel.app/?game=zeeslag&code=${encodeURIComponent(state.room.join_code)}`;const message=`Kom je Zeeslag met mij spelen op Speelplaneet? ${url}`;window.open(`https://wa.me/?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer");});
-  rematch?.addEventListener("click",async()=>{try{accept(await request("POST",{action:"rematch",roomId:state.room.id}));toast("Nieuwe vloot plaatsen — revanche!");}catch{toast("Revanche starten lukt nog niet.");}});
+  forfeit?.addEventListener("click", async () => {
+    if (!window.confirm("Wil je deze partij echt opgeven?")) return;
+    try { accept(await request("POST", { action:"forfeit", roomId:state.room.id })); toast("De partij is opgegeven."); }
+    catch { toast("Opgeven lukt nu niet."); }
+  });
+  rematch?.addEventListener("click",async()=>{
+    try {
+      const room = await request("POST",{action:"rematch",roomId:state.room.id});
+      accept(room);
+      toast(room.game_state.phase === "placing" ? "Revanche gestart: plaats je vloot!" : "Wachten tot de andere speler ook akkoord gaat.");
+    } catch { toast("Revanche aanvragen lukt nog niet."); }
+  });
+  return { request, accept };
+}
+
+function wireServerTurnGame(gameType, level, applyGameState) {
+  const create = document.querySelector("[data-create-room]");
+  const join = document.querySelector("[data-join-room]");
+  const copy = document.querySelector("[data-copy-room]");
+  const share = document.querySelector("[data-share-whatsapp]");
+  const forfeit = document.querySelector("[data-forfeit]");
+  const rematch = document.querySelector("[data-rematch]");
+  let pollTimer = 0;
+  const request = async (method, body) => {
+    if (!state.authToken) throw Object.assign(new Error("LOGIN_REQUIRED"), { code: "LOGIN_REQUIRED" });
+    const url = method === "GET" ? `/api/turn-game?id=${encodeURIComponent(body.id)}` : "/api/turn-game";
+    const response = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.authToken}` },
+      body: method === "GET" ? undefined : JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Object.assign(new Error(data.error || "TURN_GAME_FAILED"), { code: data.error });
+    return data.room;
+  };
+  const accept = room => {
+    state.room = room;
+    updateRoomPanel(room);
+    document.querySelector("[data-room-details]")?.classList.remove("hidden");
+    applyGameState(room.game_state);
+    const finished = room.game_state.phase === "finished";
+    forfeit?.classList.toggle("hidden", finished || !room.guest_id);
+    rematch?.classList.toggle("hidden", !finished || !room.guest_id);
+    if (finished && room.game_state.rematchReady?.[room.role]) {
+      rematch.textContent = "Wachten op akkoord…";
+      rematch.disabled = true;
+    } else if (rematch) {
+      rematch.textContent = "Speel een revanche";
+      rematch.disabled = false;
+    }
+  };
+  const startPolling = () => {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async () => {
+      if (!state.room?.serverTurnGame) return;
+      try {
+        const room = await request("GET", { id: state.room.id });
+        if (room.revision !== state.room.revision) accept(room);
+        document.querySelector("[data-connection-status]")?.classList.remove("offline");
+      } catch {
+        document.querySelector("[data-connection-status]")?.classList.add("offline");
+      }
+    }, 1200);
+    state.gameCleanup = () => { clearInterval(pollTimer); state.turnGameJoin = null; };
+  };
+  const messages = {
+    LOGIN_REQUIRED: "Meld dit profiel online aan om samen te spelen.",
+    ROOM_NOT_FOUND: "Deze kamer bestaat niet meer.",
+    ROOM_FULL: "Deze kamer heeft al twee spelers.",
+    NOT_YOUR_TURN: "De andere speler is eerst aan de beurt.",
+    INVALID_MOVE: "Die zet kan niet meer.",
+    GAME_FINISHED: "Deze ronde is al afgelopen.",
+    OPPONENT_REQUIRED: "Wacht eerst tot de tweede speler meedoet.",
+    REMATCH_UNAVAILABLE: "Een revanche kan pas na een gespeelde ronde.",
+    MULTIPLAYER_DISABLED: "Online samenspelen is uitgeschakeld in de ouderomgeving.",
+    STALE_STATE: "De spelstand veranderde. Probeer opnieuw.",
+  };
+  const showError = error => toast(messages[error.code] || "Online spelen lukt nu niet. Probeer opnieuw.");
+  create?.addEventListener("click", async () => {
+    try {
+      accept(await request("POST", { action: "create", gameType, level }));
+      startPolling();
+      toast("Veilige spelkamer aangemaakt.");
+    } catch (error) { showError(error); }
+  });
+  const joinCode = async code => {
+    try {
+      const room = await request("POST", { action: "join", gameType, code });
+      accept(room);
+      startPolling();
+      toast(`Je speelt tegen ${room.host_name}.`);
+      return true;
+    } catch (error) { showError(error); }
+    return false;
+  };
+  state.turnGameJoin = joinCode;
+  join?.addEventListener("click", () => joinCode(document.querySelector("[data-join-input]").value));
+  copy?.addEventListener("click", async () => {
+    if (!state.room) return;
+    try { await navigator.clipboard.writeText(state.room.join_code); } catch {}
+    toast("Joincode gekopieerd!");
+  });
+  share?.addEventListener("click", () => {
+    if (!state.room) return;
+    const names = { galgje: "Galgje", vieropeenrij: "Vier op een rij", boterkaaseieren: "Boter-kaas-en-eieren" };
+    const url = `https://speelplaneet.vercel.app/?game=${encodeURIComponent(gameType)}&code=${encodeURIComponent(state.room.join_code)}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(`Kom je ${names[gameType]} met mij spelen op Speelplaneet? ${url}`)}`, "_blank", "noopener,noreferrer");
+  });
+  forfeit?.addEventListener("click", async () => {
+    if (!window.confirm("Wil je deze partij echt opgeven?")) return;
+    try {
+      accept(await request("POST", { action: "forfeit", roomId: state.room.id }));
+      toast("De partij is opgegeven.");
+    } catch (error) { showError(error); }
+  });
+  rematch?.addEventListener("click", async () => {
+    try {
+      const room = await request("POST", { action: "rematch", roomId: state.room.id, level });
+      accept(room);
+      toast(room.game_state.phase === "playing" ? "De revanche is gestart!" : "Wachten tot de andere speler ook akkoord gaat.");
+    } catch (error) { showError(error); }
+  });
   return { request, accept };
 }
 
 function renderHangman() {
   const level = gameLevel("galgje");
+  const contentLevel = state.parentSettings?.wordLevel === "basis" ? Math.min(level, 40)
+    : state.parentSettings?.wordLevel === "gevorderd" ? Math.max(level, 41) : level;
   const words = [
     { word:"MAAN", hint:"Je ziet haar vaak ’s nachts aan de hemel." },
     { word:"STER", hint:"Een klein lichtpuntje hoog in de lucht." },
@@ -551,13 +1206,19 @@ function renderHangman() {
     { name:"Toverkracht", full:"✦", empty:"·", intro:"Gebruik je letters voordat de toverkracht verdwijnt." },
     { name:"Zaklamplicht", full:"■", empty:"□", intro:"Vind het woord zolang je zaklamp nog schijnt." }
   ];
-  const chosen = words[(level - 1) % words.length];
+  const chosen = SpeelplaneetLevels.hangman(contentLevel);
   let word = chosen.word;
   let wordHint = chosen.hint;
   const meter = meters[(level - 1) % meters.length];
-  const maxMistakes = Math.max(4, 8 - Math.floor((level - 1) / 25));
+  let maxMistakes = Math.max(4, 8 - Math.floor((level - 1) / 25));
   const guessed = new Set();
   let mistakes = 0;
+  let serverDisplay = null;
+  let serverPhase = null;
+  let serverWinner = null;
+  let serverControls = null;
+  let completionAwarded = false;
+  let struggleNoted = false;
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
       <p class="eyebrow">WOORDSPEL</p><h2>🔤 Galgje</h2><p class="game-subtitle">${meter.intro}</p>
@@ -569,23 +1230,33 @@ function renderHangman() {
     ${sidePanel("Nodig iemand uit", "Maak een kamer of vul de code van iemand anders in. Jullie raden samen hetzelfde woord.")}
   </div>`;
   const draw = () => {
-    $("#hang-word").textContent = [...word].map(letter => guessed.has(letter) ? letter : "_").join(" ");
+    $("#hang-word").textContent = serverDisplay
+      ? [...serverDisplay].join(" ")
+      : [...word].map(letter => guessed.has(letter) ? letter : "_").join(" ");
     $("#hang-status").innerHTML = `${meter.name}: <span>${meter.full.repeat(maxMistakes - mistakes)}${meter.empty.repeat(mistakes)}</span>`;
-    const won = [...word].every(letter => guessed.has(letter));
+    const won = serverPhase ? serverPhase === "finished" && serverWinner === "together" : [...word].every(letter => guessed.has(letter));
     if (won) {
       $("#hang-status").textContent = "Geweldig! Je hebt het woord gevonden.";
-      completeGame("galgje", "Galgje opgelost!");
+      if (!completionAwarded) {
+        completionAwarded = true;
+        completeGame("galgje", "Galgje opgelost!");
+      }
       document.querySelectorAll(".letter-button").forEach(b => b.disabled = true);
-    } else if (mistakes >= maxMistakes) {
-      $("#hang-status").textContent = `Bijna! Het woord was ${word}. Probeer opnieuw.`;
+    } else if ((serverPhase === "finished" && serverWinner === "lost") || mistakes >= maxMistakes) {
+      $("#hang-status").textContent = `Bijna! Het woord was ${serverDisplay || word}. Probeer opnieuw.`;
       document.querySelectorAll(".letter-button").forEach(b => b.disabled = true);
+      if (!struggleNoted) { struggleNoted = true; noteStruggle("galgje"); }
     }
   };
   $("#letters").innerHTML = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map(l => `<button class="letter-button">${l}</button>`).join("");
   const applyHangmanState = remote => {
     if (!remote || remote.kind !== "galgje") return;
-    word = remote.word;
+    if (serverPhase === "finished" && remote.phase === "playing") completionAwarded = false;
     wordHint = remote.hint || wordHint;
+    serverDisplay = remote.display || null;
+    serverPhase = remote.phase || null;
+    serverWinner = remote.winner || null;
+    maxMistakes = remote.maxMistakes || maxMistakes;
     $("#hang-hint-text").textContent = wordHint;
     guessed.clear();
     (remote.guessed || []).forEach(letter => guessed.add(letter));
@@ -594,6 +1265,14 @@ function renderHangman() {
     draw();
   };
   document.querySelectorAll(".letter-button").forEach(button => button.addEventListener("click", async () => {
+    if (state.room?.serverTurnGame) {
+      try {
+        const room = await serverControls.request("POST", { action: "move", roomId: state.room.id, letter: button.textContent });
+        serverControls.accept(room);
+        if (room.game_state.winner === "together") completeGame("galgje", "Galgje opgelost!");
+      } catch (error) { toast(error.code === "INVALID_MOVE" ? "Die letter is al geprobeerd." : "De letter kon niet worden verstuurd."); }
+      return;
+    }
     button.disabled = true;
     guessed.add(button.textContent);
     if (!word.includes(button.textContent)) mistakes++;
@@ -601,16 +1280,12 @@ function renderHangman() {
     await syncGameState({ kind: "galgje", word, hint: wordHint, guessed: [...guessed], mistakes });
   }));
   draw();
-  wireMultiplayer("galgje", () => ({ kind: "galgje", word, hint: wordHint, guessed: [...guessed], mistakes }), applyHangmanState);
+  serverControls = wireServerTurnGame("galgje", contentLevel, applyHangmanState);
 }
 
 function renderSudoku() {
   const level = gameLevel("sudoku");
-  const random = levelRng("sudoku", level);
-  const solution = [1,2,3,4, 3,4,1,2, 2,1,4,3, 4,3,2,1];
-  const clueCount = Math.max(4, 10 - Math.floor((level - 1) / 17));
-  const cluePositions = shuffled(Array.from({length:16},(_,i)=>i), random).slice(0,clueCount);
-  const puzzle = solution.map((value,index)=>cluePositions.includes(index)?value:0);
+  const { solution, puzzle } = SpeelplaneetLevels.sudoku(level);
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
       <p class="eyebrow">LEVEL 1 · LOGICA</p><h2>🧩 Mini Sudoku</h2><p class="game-subtitle">Zorg dat 1, 2, 3 en 4 één keer in iedere rij en elk blok staan.</p>
@@ -625,51 +1300,37 @@ function renderSudoku() {
   $("#check-sudoku").addEventListener("click", () => {
     const values = [...document.querySelectorAll(".sudoku-cell")].map(c => Number(c.value));
     if (values.every((v, i) => v === solution[i])) completeGame("sudoku", "Sudoku helemaal goed!");
-    else toast("Er klopt nog iets niet. Kijk rustig nog eens.");
+    else { noteStruggle("sudoku"); toast("Er klopt nog iets niet. Kijk rustig nog eens."); }
   });
 }
 
 function renderWordSearch() {
   const level = gameLevel("woordzoeker");
-  const random = levelRng("woordzoeker", level);
-  const allWords = ["STER", "ZEE", "RAKET", "AARDE", "MAAN"];
-  const words = allWords.slice(0, Math.min(5, 3 + Math.floor((level - 1) / 34)));
-  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  const grid = Array.from({length:64},()=>letters[Math.floor(random()*letters.length)]);
-  words.forEach((word,index)=>{
-    const row=index;
-    const start=Math.floor(random()*(9-word.length));
-    [...word].forEach((letter,offset)=>grid[row*8+start+offset]=letter);
-  });
-  grid[62]=letters[Math.floor((level-1)/26)%26];
-  grid[63]=letters[(level-1)%26];
-  const rows = Array.from({length:8},(_,row)=>grid.slice(row*8,row*8+8).join(""));
+  const { words, grid, placements } = SpeelplaneetLevels.wordSearch(level);
   const found = new Set();
   let selected = [];
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
       <p class="eyebrow">LEVEL 1 · SPEUREN</p><h2>🔎 Woordzoeker</h2><p class="game-subtitle">Tik de letters van een woord van links naar rechts aan.</p>
-      <div class="wordsearch-grid">${rows.join("").split("").map((l,i) => `<button class="wordsearch-cell" data-index="${i}">${l}</button>`).join("")}</div>
+      <div class="wordsearch-grid">${grid.map((letter,index) => `<button class="wordsearch-cell" data-index="${index}">${letter}</button>`).join("")}</div>
       <div class="word-list">${words.map(w => `<span class="word-pill" data-word="${w}">${w}</span>`).join("")}</div>
     </div>
     ${sidePanel("Zoektip", "Alle woorden staan in deze eerste ronde horizontaal. Een volgend level kan ook verticaal en schuin.", false)}
   </div>`;
   document.querySelectorAll(".wordsearch-cell").forEach(cell => cell.addEventListener("click", () => {
     const index = Number(cell.dataset.index);
-    if (selected.length && index !== selected[selected.length - 1] + 1) {
-      document.querySelectorAll(".wordsearch-cell.selected").forEach(c => c.classList.remove("selected"));
-      selected = [];
-    }
     selected.push(index);
     cell.classList.add("selected");
-    const attempt = selected.map(i => rows.join("")[i]).join("");
-    if (words.includes(attempt)) {
-      found.add(attempt);
-      document.querySelector(`[data-word="${attempt}"]`).classList.add("found");
+    const matching = placements.filter(placement => selected.every((value, offset) => placement.indices[offset] === value));
+    const completed = matching.find(placement => placement.indices.length === selected.length);
+    if (completed) {
+      found.add(completed.word);
+      document.querySelector(`[data-word="${completed.word}"]`).classList.add("found");
+      completed.indices.forEach(i => document.querySelector(`[data-index="${i}"]`).classList.add("found-cell"));
       selected = [];
       setTimeout(() => document.querySelectorAll(".wordsearch-cell.selected").forEach(c => c.classList.remove("selected")), 400);
       if (found.size === words.length) completeGame("woordzoeker", "Alle woorden gevonden!");
-    } else if (!words.some(w => w.startsWith(attempt))) {
+    } else if (!matching.length) {
       setTimeout(() => {
         document.querySelectorAll(".wordsearch-cell.selected").forEach(c => c.classList.remove("selected"));
         selected = [];
@@ -680,11 +1341,10 @@ function renderWordSearch() {
 
 function renderMemory() {
   const level = gameLevel("memory");
-  const random = levelRng("memory", level);
-  const allSymbols = ["🚀", "🪐", "⭐", "👽", "🌙", "🛰️", "☄️", "🌍", "🔭", "🛸", "🌌", "👩‍🚀"];
-  const pairCount = Math.min(12, 4 + Math.floor((level - 1) / 12));
-  const symbols = allSymbols.slice(0, pairCount);
-  const cards = shuffled([...symbols, ...symbols], random);
+  const generated = SpeelplaneetLevels.memory(level);
+  const pairCount = generated.pairCount;
+  const symbolIcon = { raket:"🚀", planeet:"🪐", ster:"⭐", alien:"👽", maan:"🌙", satelliet:"🛰️", komeet:"☄️", aarde:"🌍", telescoop:"🔭", ufo:"🛸", melkweg:"🌌", astronaut:"👩‍🚀" };
+  const cards = generated.cards.map(symbol => symbolIcon[symbol]);
   let open = [], found = new Set(), moves = 0, locked = false;
   stage.innerHTML = `<div class="game-layout">
     <div class="game-panel">
@@ -722,6 +1382,7 @@ function renderMemory() {
 function renderTicTacToe() {
   const level = gameLevel("boterkaaseieren");
   const random = levelRng("boterkaaseieren", level);
+  const aiProfile = SpeelplaneetLevels.turnGames(level);
   let game = { kind: "boterkaaseieren", board: Array(9).fill(null), turn: "host", winner: null };
   const role = () => state.room?.role || (state.room && state.room.host_id !== state.sessionId ? "guest" : "host");
   const mark = playerRole => playerRole === "host" ? "X" : "O";
@@ -748,30 +1409,40 @@ function renderTicTacToe() {
       : game.turn === role() ? `Jij bent aan de beurt met ${mark(role())}.` : "Even wachten op de tegenstander…";
   };
   const apply = remote => { if (remote?.kind === "boterkaaseieren") { game = remote; draw(); } };
+  let serverControls = null;
   document.querySelectorAll("[data-ttt]").forEach(cell => cell.addEventListener("click", async () => {
     const i = Number(cell.dataset.ttt);
     if (cell.disabled) return;
+    if (state.room?.serverTurnGame) {
+      try {
+        const room = await serverControls.request("POST", { action: "move", roomId: state.room.id, index: i });
+        serverControls.accept(room);
+        if (room.game_state.winner === mark(room.role)) completeGame("boterkaaseieren", "Drie op een rij!");
+      } catch (error) { toast(error.code === "NOT_YOUR_TURN" ? "De andere speler is aan de beurt." : "Die zet lukte niet."); }
+      return;
+    }
     game.board[i] = mark(role());
     game.winner = winner(game.board);
     if (!game.winner) game.turn = role() === "host" ? "guest" : "host";
     if (!state.room && !game.winner) {
       const free = game.board.map((v,i) => v ? null : i).filter(i => i !== null);
       const tactical = symbol => free.find(i => { const test=[...game.board];test[i]=symbol;return winner(test)===symbol; });
-      const smart = random() < (.2 + level * .008);
+      const smart = random() < aiProfile.ticTacToeSmart;
       const choice = smart ? (tactical("O") ?? tactical("X") ?? (free.includes(4) ? 4 : free[Math.floor(random()*free.length)])) : free[Math.floor(random()*free.length)];
       game.board[choice] = "O"; game.winner = winner(game.board); game.turn = "host";
     }
     if (game.winner === mark(role())) completeGame("boterkaaseieren", "Drie op een rij!");
     draw(); await syncGameState(game);
   }));
-  draw(); wireMultiplayer("boterkaaseieren", () => game, apply);
+  draw(); serverControls = wireServerTurnGame("boterkaaseieren", level, apply);
 }
 
 function renderConnectFour() {
   const level = gameLevel("vieropeenrij");
   const random = levelRng("vieropeenrij", level);
+  const aiProfile = SpeelplaneetLevels.turnGames(level);
   let game = { kind: "vieropeenrij", board: Array(42).fill(null), turn: "host", winner: null };
-  const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
+  const role = () => state.room?.role || (state.room && state.room.host_id !== state.sessionId ? "guest" : "host");
   const token = r => r === "host" ? "red" : "yellow";
   const drop = (board, column, color) => {
     for (let row = 5; row >= 0; row--) { const i = row * 7 + column; if (!board[i]) { board[i] = color; return i; } }
@@ -798,8 +1469,17 @@ function renderConnectFour() {
       : game.turn === role() ? `Jouw beurt met ${token(role()) === "red" ? "rood" : "geel"}.` : "De tegenstander denkt na…";
   };
   const apply = remote => { if (remote?.kind === "vieropeenrij") { game = remote; draw(); } };
+  let serverControls = null;
   document.querySelectorAll("[data-column]").forEach(cell => cell.addEventListener("click", async () => {
     if (cell.disabled) return;
+    if (state.room?.serverTurnGame) {
+      try {
+        const room = await serverControls.request("POST", { action: "move", roomId: state.room.id, column: Number(cell.dataset.column) });
+        serverControls.accept(room);
+        if (room.game_state.winner === token(room.role)) completeGame("vieropeenrij", "Vier op een rij!");
+      } catch (error) { toast(error.code === "NOT_YOUR_TURN" ? "De andere speler is aan de beurt." : "Die zet lukte niet."); }
+      return;
+    }
     const color = token(role());
     drop(game.board, Number(cell.dataset.column), color);
     game.winner = hasFour(game.board, color) ? color : game.board.every(Boolean) ? "draw" : null;
@@ -808,7 +1488,7 @@ function renderConnectFour() {
       const valid = [0,1,2,3,4,5,6].filter(c => !game.board[c]);
       const winning = valid.find(c=>{const test=[...game.board];drop(test,c,"yellow");return hasFour(test,"yellow");});
       const blocking = valid.find(c=>{const test=[...game.board];drop(test,c,"red");return hasFour(test,"red");});
-      const smart = random() < (.15 + level * .0085);
+      const smart = random() < aiProfile.connectFourSmart;
       const preferred = valid.slice().sort((a,b)=>Math.abs(a-3)-Math.abs(b-3));
       const col = smart ? (winning ?? blocking ?? preferred[0]) : valid[Math.floor(random()*valid.length)];
       drop(game.board, col, "yellow");
@@ -818,15 +1498,15 @@ function renderConnectFour() {
     if (game.winner === color) completeGame("vieropeenrij", "Vier op een rij!");
     draw(); await syncGameState(game);
   }));
-  draw(); wireMultiplayer("vieropeenrij", () => game, apply);
+  draw(); serverControls = wireServerTurnGame("vieropeenrij", level, apply);
 }
 
 function renderMastermind() {
   const level = gameLevel("mastermind");
   const colors = ["coral","blue","yellow","purple","green","navy"];
-  const codeLength = Math.min(6, 3 + Math.floor((level - 1) / 25));
-  const maxTurns = Math.max(6, 10 - Math.floor((level - 1) / 25));
-  const secret = Array.from({length:codeLength}, (_,position) => colors[Math.floor((level-1)/(6**position))%6]);
+  const generated = SpeelplaneetLevels.mastermind(level);
+  const { codeLength, maxTurns } = generated;
+  const secret = generated.code.map(index => colors[index]);
   let guess = [], turn = 1;
   stage.innerHTML = `<div class="game-layout"><div class="game-panel">
     <p class="eyebrow">LOGICAPUZZEL</p><h2>🎨 Kraak de kleurcode</h2>
@@ -847,31 +1527,34 @@ function renderMastermind() {
     let near=0; remainingGuess.forEach(c=>{const i=remainingSecret.indexOf(c);if(i>=0){near++;remainingSecret.splice(i,1);}});
     $("#code-history").insertAdjacentHTML("beforeend",`<div class="code-row"><strong>${turn}</strong>${guess.map(c=>`<span class="color-${c}"></span>`).join("")}<small>🟡 ${exact} · ⚪ ${near}</small></div>`);
     if(exact===codeLength){completeGame("mastermind","Kleurcode gekraakt!");$("#check-code").disabled=true;document.querySelectorAll("[data-color]").forEach(b=>b.disabled=true);}
-    else if(turn===maxTurns){toast("De code ontsnapte. Probeer een nieuwe ronde!");$("#check-code").disabled=true;}
+    else if(turn===maxTurns){noteStruggle("mastermind");toast("De code ontsnapte. Probeer een nieuwe ronde!");$("#check-code").disabled=true;}
     else {turn++;guess=[];drawGuess();}
   });
   drawGuess();
 }
 
 function renderMathSprint() {
-  const level=gameLevel("rekensprint"), total=Math.min(20,8+Math.floor(level/8));
-  const random=levelRng("rekensprint",level);
+  const level=gameLevel("rekensprint");
+  const contentLevel=state.parentSettings?.mathLevel==="basis"?Math.min(level,60)
+    :state.parentSettings?.mathLevel==="tafels"?Math.min(80,Math.max(61,level))
+    :state.parentSettings?.mathLevel==="gemengd"?Math.max(81,level):level;
+  const challenge=SpeelplaneetLevels.mathLevel(contentLevel), total=challenge.questions.length;
   let question=0, score=0, answer=0;
   stage.innerHTML=`<div class="game-layout"><div class="game-panel math-panel">
-    <p class="eyebrow">REKENMISSIE</p><h2>➕ Rekensprint</h2><p class="game-subtitle">Los ${total} sommen op. Rustig nadenken mag!</p>
+    <p class="eyebrow">REKENMISSIE · ${challenge.goal.toUpperCase()}</p><h2>➕ Rekensprint</h2><p class="game-subtitle">Los ${total} sommen op. Rustig nadenken mag!</p>
     <div class="status-box" id="math-status">Som 1 van ${total} · Score: 0</div>
     <div class="math-question" id="math-question"></div>
     <form id="math-form"><input id="math-answer" inputmode="numeric" autocomplete="off" aria-label="Antwoord"><button class="primary-button">Controleer</button></form>
   </div>${sidePanel("Rekentip","Splits een moeilijke som op in twee kleinere stapjes.",false)}</div>`;
-  const next=()=>{const range=10+Math.floor(level*1.8),a=question===0?level+2:2+Math.floor(random()*range),b=question===0?(level%9)+2:2+Math.floor(random()*range);let op="+";if(question>0&&level>25&&random()>.55)op="-";if(question>0&&level>65&&random()>.72)op="×";if(op==="+"){answer=a+b;$("#math-question").textContent=`${a} + ${b} = ?`;}else if(op==="-"){answer=Math.abs(a-b);$("#math-question").textContent=`${Math.max(a,b)} − ${Math.min(a,b)} = ?`;}else{const x=2+Math.floor(random()*Math.min(10,2+level/10)),y=2+Math.floor(random()*10);answer=x*y;$("#math-question").textContent=`${x} × ${y} = ?`;}$("#math-answer").value="";$("#math-answer").focus();};
-  $("#math-form").addEventListener("submit",e=>{e.preventDefault();if(Number($("#math-answer").value)===answer){score++;toast("Goed gerekend!");}else toast(`Bijna! Het antwoord was ${answer}.`);question++;if(question===total){$("#math-question").textContent=`${score} van de ${total} goed!`;$("#math-form").classList.add("hidden");if(score>=Math.ceil(total*.7))completeGame("rekensprint","Rekensprint voltooid!");}else{$("#math-status").textContent=`Som ${question+1} van ${total} · Score: ${score}`;next();}});
+  const next=()=>{const current=challenge.questions[question];answer=current.answer;$("#math-question").textContent=current.text;$("#math-answer").value="";$("#math-answer").focus();};
+  $("#math-form").addEventListener("submit",e=>{e.preventDefault();if(Number($("#math-answer").value)===answer){score++;toast("Goed gerekend!");}else {noteStruggle("rekensprint");toast(`Bijna! Het antwoord was ${answer}.`);}question++;if(question===total){$("#math-question").textContent=`${score} van de ${total} goed!`;$("#math-form").classList.add("hidden");if(score>=Math.ceil(total*.7))completeGame("rekensprint","Rekensprint voltooid!");}else{$("#math-status").textContent=`Som ${question+1} van ${total} · Score: ${score}`;next();}});
   next();
 }
 
 function renderSimon() {
-  const gameLvl=gameLevel("simon"), target=Math.min(15,4+Math.floor((gameLvl-1)/9));
+  const gameLvl=gameLevel("simon"), generated=SpeelplaneetLevels.simon(gameLvl), target=generated.target;
   const colors=["coral","blue","yellow","purple"]; let sequence=[],input=[],level=0,accepting=false;
-  const levelSequence=Array.from({length:target},(_,position)=>colors[Math.floor((gameLvl-1)/(4**position))%4]);
+  const levelSequence=generated.sequence.map(index=>colors[index]);
   stage.innerHTML=`<div class="game-layout"><div class="game-panel simon-panel">
     <p class="eyebrow">GEHEUGENMISSIE</p><h2>✨ Sterrenreeks</h2><p class="game-subtitle">Bekijk de lichtjes en tik daarna precies dezelfde reeks.</p>
     <div class="status-box" id="simon-status">Druk op start wanneer je klaar bent.</div>
@@ -881,19 +1564,91 @@ function renderSimon() {
   const flash=async()=>{accepting=false;$("#simon-status").textContent=`Kijk goed… level ${level}`;for(const c of sequence){await new Promise(r=>setTimeout(r,350));const p=document.querySelector(`[data-simon="${c}"]`);p.classList.add("flash");await new Promise(r=>setTimeout(r,420));p.classList.remove("flash");}input=[];accepting=true;$("#simon-status").textContent="Jouw beurt!";};
   const advance=()=>{level++;sequence.push(levelSequence[level-1]);flash();};
   $("#start-simon").addEventListener("click",()=>{$("#start-simon").classList.add("hidden");advance();});
-  document.querySelectorAll("[data-simon]").forEach(p=>p.addEventListener("click",()=>{if(!accepting)return;input.push(p.dataset.simon);const i=input.length-1;if(input[i]!==sequence[i]){accepting=false;$("#simon-status").textContent=`Oeps! Je haalde reeks ${level}.`;$("#start-simon").textContent="Opnieuw";$("#start-simon").classList.remove("hidden");sequence=[];level=0;}else if(input.length===sequence.length){accepting=false;if(level===target){completeGame("simon",`${target} reeksen onthouden!`);$("#simon-status").textContent=`🏆 Alle ${target} reeksen goed onthouden!`;}else setTimeout(advance,650);}}));
+  document.querySelectorAll("[data-simon]").forEach(p=>p.addEventListener("click",()=>{if(!accepting)return;input.push(p.dataset.simon);const i=input.length-1;if(input[i]!==sequence[i]){noteStruggle("simon");accepting=false;$("#simon-status").textContent=`Oeps! Je haalde reeks ${level}.`;$("#start-simon").textContent="Opnieuw";$("#start-simon").classList.remove("hidden");sequence=[];level=0;}else if(input.length===sequence.length){accepting=false;if(level===target){completeGame("simon",`${target} reeksen onthouden!`);$("#simon-status").textContent=`🏆 Alle ${target} reeksen goed onthouden!`;}else setTimeout(advance,650);}}));
+}
+
+function renderMaze() {
+  const level = gameLevel("doolhof");
+  const maze = SpeelplaneetLevels.maze(level);
+  let position = maze.start, moves = 0;
+  const directions = {
+    up:{ delta:-maze.size,wall:1,key:"ArrowUp" },
+    right:{ delta:1,wall:2,key:"ArrowRight" },
+    down:{ delta:maze.size,wall:4,key:"ArrowDown" },
+    left:{ delta:-1,wall:8,key:"ArrowLeft" },
+  };
+  stage.innerHTML = `<div class="game-layout"><div class="game-panel maze-panel">
+    <p class="eyebrow">ROUTEMISSIE</p><h2>🌀 Sterrendoolhof</h2>
+    <p class="game-subtitle">Breng de raket veilig naar de planeet. Je kunt altijd een stap terug.</p>
+    <div class="status-box" id="maze-status">Zet de eerste stap naar de planeet.</div>
+    <div class="maze-grid" style="--maze-size:${maze.size}" role="grid" aria-label="Doolhof van ${maze.size} bij ${maze.size}">
+      ${maze.walls.map((walls,index) => `<div role="gridcell" class="maze-cell ${walls&1?"wall-n":""} ${walls&2?"wall-e":""} ${walls&4?"wall-s":""} ${walls&8?"wall-w":""}" data-maze-cell="${index}" aria-label="Vak ${index+1}"></div>`).join("")}
+    </div>
+    <div class="maze-controls" aria-label="Bestuur de raket">
+      <button type="button" data-maze-move="up" aria-label="Omhoog">↑</button>
+      <button type="button" data-maze-move="left" aria-label="Links">←</button>
+      <button type="button" data-maze-move="down" aria-label="Omlaag">↓</button>
+      <button type="button" data-maze-move="right" aria-label="Rechts">→</button>
+    </div>
+  </div>${sidePanel("Routehulp","Tik op Toon één stap wanneer je even niet weet welke kant je op kunt.",false).replace("</aside>",'<button class="mini-button" type="button" id="maze-hint">Toon één stap</button></aside>')}</div>`;
+  const pathFrom = start => {
+    const parents = Array(maze.walls.length).fill(-1), queue=[start], seen=new Set([start]);
+    for (let cursor=0;cursor<queue.length;cursor++) {
+      const cell=queue[cursor];
+      for (const direction of Object.values(directions)) {
+        if (maze.walls[cell]&direction.wall) continue;
+        const next=cell+direction.delta;
+        if (seen.has(next)) continue;
+        seen.add(next);parents[next]=cell;queue.push(next);
+      }
+    }
+    const path=[];
+    for(let cell=maze.goal;cell>=0;cell=parents[cell]){path.push(cell);if(cell===start)break;}
+    return path.reverse();
+  };
+  const draw = () => {
+    document.querySelectorAll("[data-maze-cell]").forEach((cell,index) => {
+      cell.classList.toggle("maze-player",index===position);
+      cell.classList.toggle("maze-goal",index===maze.goal);
+      cell.textContent = index===position ? "🚀" : index===maze.goal ? "🪐" : "";
+      cell.setAttribute("aria-current",index===position ? "true" : "false");
+    });
+    $("#maze-status").textContent = position===maze.goal ? `Planeet bereikt in ${moves} stappen!` : `${moves} stap${moves===1?"":"pen"} gezet · rustig verder zoeken.`;
+  };
+  const move = name => {
+    const direction=directions[name];
+    if (!direction || maze.walls[position]&direction.wall || state.levelCompleted) return;
+    position+=direction.delta;moves++;draw();
+    if(position===maze.goal) completeGame("doolhof","Route naar de planeet gevonden!");
+  };
+  document.querySelectorAll("[data-maze-move]").forEach(button=>button.addEventListener("click",()=>move(button.dataset.mazeMove)));
+  $("#maze-hint").addEventListener("click",()=>{
+    const path=pathFrom(position),next=path[1];
+    if(next===undefined)return;
+    const cell=document.querySelector(`[data-maze-cell="${next}"]`);
+    cell.classList.add("maze-hint-cell");setTimeout(()=>cell.classList.remove("maze-hint-cell"),1400);
+    const support=supportEntry("doolhof");support.hints++;support.updatedAt=Date.now();saveProgress();
+  });
+  const keyHandler=event=>{
+    if (["INPUT","SELECT","TEXTAREA"].includes(event.target.tagName)) return;
+    const entry=Object.entries(directions).find(([,direction])=>direction.key===event.key);
+    if(!entry)return;event.preventDefault();move(entry[0]);
+  };
+  document.addEventListener("keydown",keyHandler);
+  state.gameCleanup=()=>document.removeEventListener("keydown",keyHandler);
+  draw();
 }
 
 function renderSpaceRunner() {
   const level = gameLevel("ruimterunner");
   const random = levelRng("ruimterunner", level);
-  const target = Math.min(35, 8 + Math.floor((level - 1) / 4));
-  const startSpeed = 2.1 + level * .006;
+  const runnerProfile = SpeelplaneetLevels.runner(level);
+  const { target, startSpeed } = runnerProfile;
   let character = localStorage.getItem("speelplaneet-runner") || "ellie";
   if (!["ellie","mila","mats"].includes(character)) character = "ellie";
   const runnerName = name => ({ ellie:"Ellie", mila:"Mila", mats:"Mats" }[name] || "Ellie");
   const runnerHighscores = state.progress.runnerHighscores;
-  let running = false, jumping = false, ducking = false, y = 0, velocity = 0, duckUntil = 0, duckTimer = 0;
+  let running = false, paused = false, jumping = false, ducking = false, y = 0, velocity = 0, duckUntil = 0, duckTimer = 0;
   let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
   const obstacles = [];
 
@@ -965,7 +1720,7 @@ function renderSpaceRunner() {
   };
 
   const spawnObstacle = () => {
-    const type = level < 8 ? "robot" : (random() < Math.min(.55, .18 + level / 180) ? "ufo" : "robot");
+    const type = random() < runnerProfile.ufoChance ? "ufo" : "robot";
     const element = document.createElement("div");
     element.className = `runner-obstacle obstacle-${type}`;
     element.textContent = type === "robot" ? "🤖" : "🛸";
@@ -985,7 +1740,7 @@ function renderSpaceRunner() {
   };
 
   const finish = won => {
-    running = false;
+    running = false; paused = false;
     cancelAnimationFrame(frame);
     clearTimeout(duckTimer);
     const meters = Math.floor(distance / 100);
@@ -1002,10 +1757,11 @@ function renderSpaceRunner() {
       ? `🏆 ${runnerName(character)} voltooide de missie met ${meters} meter${isRecord ? " — nieuw record!" : "!"}`
       : `Botsing na ${meters} meter.${isRecord ? " 🏅 Nieuw afstandsrecord!" : " Gelukkig beschermde het ruimtepak je."}`;
     if (won) completeGame("ruimterunner", "Ruimtemissie voltooid!");
+    else noteStruggle("ruimterunner");
   };
 
   const loop = time => {
-    if (!running) return;
+    if (!running || paused) return;
     const delta = Math.min(32, time - lastTime || 16.7);
     lastTime = time;
     const gradualAcceleration = Math.min(2.9, passed * .085 + distance / 48000);
@@ -1015,7 +1771,7 @@ function renderSpaceRunner() {
     nextSpawn -= delta;
     if (nextSpawn <= 0) {
       spawnObstacle();
-      const difficultyGap = Math.max(1050, 1950 - level * 3.2 - passed * 10);
+      const difficultyGap = Math.max(1050, runnerProfile.minimumGap - passed * 10);
       nextSpawn = difficultyGap + random() * 800;
     }
     if (jumping) {
@@ -1042,7 +1798,7 @@ function renderSpaceRunner() {
 
   const start = () => {
     obstacles.splice(0).forEach(obstacle => obstacle.element.remove());
-    running = true; jumping = false; ducking = false; duckUntil = 0; clearTimeout(duckTimer); y = 0; velocity = 0; passed = 0; distance = 0;
+    running = true; paused = false; jumping = false; ducking = false; duckUntil = 0; clearTimeout(duckTimer); y = 0; velocity = 0; passed = 0; distance = 0;
     nextSpawn = 1450 + random() * 650; runner.style.transform = ""; runner.classList.remove("ducking");
     $("#runner-score").textContent = "0"; $("#runner-distance").textContent = "0"; $("#runner-start").classList.add("hidden");
     status.textContent = "De missie is gestart — let goed op!";
@@ -1066,8 +1822,22 @@ function renderSpaceRunner() {
   };
   document.addEventListener("keydown", keyHandler);
   document.addEventListener("keyup", keyUpHandler);
+  configureGamePause(
+    () => {
+      if (!running || paused) return false;
+      paused = true; cancelAnimationFrame(frame); clearTimeout(duckTimer);
+      status.textContent = "⏸ Missie gepauzeerd — neem rustig de tijd.";
+      return true;
+    },
+    () => {
+      if (!running || !paused) return false;
+      paused = false; lastTime = performance.now(); frame = requestAnimationFrame(loop);
+      status.textContent = "De missie gaat verder — let goed op!";
+      return true;
+    }
+  );
   state.gameCleanup = () => {
-    running = false;
+    running = false; paused = false;
     cancelAnimationFrame(frame);
     clearTimeout(duckTimer);
     document.removeEventListener("keydown", keyHandler);
@@ -1081,6 +1851,7 @@ function renderBattleship() {
   const fleet = [5, 4, 3, 3, 2];
   let orientation = "horizontal";
   let selectedShip = 0;
+  let fleetVariant = 0;
   let battle = {
     kind: "zeeslag",
     phase: "placing",
@@ -1150,19 +1921,7 @@ function renderBattleship() {
   };
 
   const randomizeFleet = player => {
-    player.ships = [];
-    fleet.forEach((length, index) => {
-      let placed = false;
-      while (!placed) {
-        orientation = random() > .5 ? "horizontal" : "vertical";
-        const start = Math.floor(random() * 100);
-        const cells = cellsForPlacement(start, length);
-        if (cells && !cells.some(cell => occupied(player).has(cell))) {
-          player.ships.push({ index, length, cells });
-          placed = true;
-        }
-      }
-    });
+    player.ships = SpeelplaneetLevels.battleship(level, fleetVariant++).ships;
   };
 
   const drawBattle = () => {
@@ -1310,6 +2069,146 @@ function renderBattleship() {
   serverBattleControls=wireBattleshipMultiplayer(()=>battle.players[role()].ships,applySeaState);
 }
 
+const parentDialog = $("#parent-dialog");
+let parentCodeSession = "";
+let parentReportText = "";
+
+async function parentRequest(action, settings) {
+  const response = await fetch("/api/parent", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", Authorization:`Bearer ${state.authToken}` },
+    body:JSON.stringify({ action, parentCode:parentCodeSession, settings }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(data.error || "PARENT_FAILED"), { code:data.error });
+  return data;
+}
+
+function renderParentDashboard(data) {
+  setParentSettings(data.settings);
+  const stats = data.progress.stats || {};
+  const totalMinutes = Math.round(Object.values(stats).reduce((sum, item) => sum + (item.totalSeconds || 0), 0) / 60);
+  const favorite = games.slice().sort((left,right) => (stats[right.id]?.wins || 0) - (stats[left.id]?.wins || 0))[0];
+  const favoriteTitle = (stats[favorite?.id]?.wins || 0) > 0 ? favorite.title : "Nog ontdekken";
+  const highestLevel = Math.max(1, ...Object.values(data.progress.levels || {}).map(Number));
+  $("#parent-summary").innerHTML = `<div><small>PROFIEL</small><strong id="parent-child-name"></strong></div>
+    <div><small>SPEELTIJD</small><strong>${totalMinutes} min</strong></div>
+    <div><small>HOOGSTE LEVEL</small><strong>${highestLevel}</strong></div>
+    <div><small>FAVORIET</small><strong>${favoriteTitle}</strong></div>
+    <div><small>TECHNISCHE FOUTEN · 7 DAGEN</small><strong>${data.system?.recentErrors || 0}</strong></div>
+    <div><small>DIENSTSTATUS</small><strong id="parent-service-health">Controleren…</strong></div>`;
+  $("#parent-child-name").textContent = data.player.name;
+  renderPositiveParentReport(data);
+  $("#parent-game-stats").innerHTML = games.map(game => {
+    const item = stats[game.id] || { attempts:0, wins:0, totalSeconds:0 };
+    const success = item.attempts ? Math.round(item.wins / item.attempts * 100) : 0;
+    return `<div><span>${game.icon}</span><strong>${game.title}</strong><small>${item.wins} voltooid · ${success}% succes · ${Math.round(item.totalSeconds / 60)} min</small></div>`;
+  }).join("");
+  $("#setting-multiplayer").checked = data.settings.multiplayerEnabled !== false;
+  $("#setting-paused").checked = data.settings.paused === true;
+  $("#setting-word-level").value = data.settings.wordLevel || "auto";
+  $("#setting-math-level").value = data.settings.mathLevel || "auto";
+  $("#parent-unlock-form").classList.add("hidden");
+  $("#parent-dashboard-content").classList.remove("hidden");
+  fetch("/api/health").then(response => response.json()).then(health => {
+    $("#parent-service-health").textContent = health.status === "ok" ? "Alles werkt" : "Aandacht nodig";
+  }).catch(() => { $("#parent-service-health").textContent = "Niet bereikbaar"; });
+}
+
+function renderPositiveParentReport(data) {
+  const progress = data.progress || {}, stats = progress.stats || {};
+  const played = games.filter(game => (stats[game.id]?.attempts || 0) > 0);
+  const completedRounds = Object.values(stats).reduce((sum,item) => sum + (item.wins || 0),0);
+  const highestLevel = Math.max(1,...Object.values(progress.levels || {}).map(Number));
+  const activeDays = recentActivityKeys(14).filter(key => (progress.activity?.[key] || []).length).length;
+  const favorite = games.slice().sort((a,b) => (stats[b.id]?.wins || 0) - (stats[a.id]?.wins || 0))[0];
+  const favoriteWins = stats[favorite?.id]?.wins || 0;
+  const supportGame = games.slice().sort((a,b) => (progress.support?.[b.id]?.streak || 0) - (progress.support?.[a.id]?.streak || 0))[0];
+  const supportStreak = progress.support?.[supportGame?.id]?.streak || 0;
+  const highlights = [];
+  if (completedRounds > 0) highlights.push(["🌟","Volhouden",`${completedRounds} ronde${completedRounds === 1 ? "" : "s"} met succes afgerond.`]);
+  else highlights.push(["🌱","Mooie start","Er ligt nog een hele speelwereld klaar om rustig te ontdekken."]);
+  if (played.length >= 3) highlights.push(["🧭","Nieuwsgierig",`${played.length} verschillende spellen uitgeprobeerd.`]);
+  else highlights.push(["🪐","Eigen tempo",played.length ? `${played.length} spel${played.length === 1 ? "" : "len"} rustig leren kennen.` : "De eerste spelkeuze mag helemaal op eigen tempo gebeuren."]);
+  if (favoriteWins > 0) highlights.push(["💛","Graag gespeeld",`${favorite.title} lijkt op dit moment veel speelplezier te geven.`]);
+  else if (highestLevel > 1) highlights.push(["🚀","Vooruitgang",`Al tot niveau ${highestLevel} op ruimtemissie.`]);
+  else highlights.push(["🎈","Zonder druk","Spelen en ontdekken mag hier belangrijker zijn dan winnen."]);
+  let suggestion = "Kies samen één kort spel en laat het kind zelf bepalen of er daarna nog een ronde komt.";
+  if (supportStreak >= 2) suggestion = `${supportGame.title} vraagt momenteel wat extra oefening. Speel eens samen en gebruik de rustige hint wanneer dat fijn voelt.`;
+  else if (played.length < 4) {
+    const unplayed = games.find(game => !played.includes(game));
+    suggestion = `Probeer samen eens ${unplayed?.title || "een nieuw spel"} voor extra afwisseling, zonder doel of tijdsdruk.`;
+  } else if (activeDays >= 5) suggestion = "Er is de voorbije twee weken regelmatig gespeeld. Een speelpauze of een gezamenlijke ronde kan even waardevol zijn.";
+  else if (favoriteWins > 0) suggestion = `Laat het kind kiezen: verder met ${favorite.title}, of juist één heel ander spel ontdekken.`;
+  $("#parent-highlights").innerHTML = highlights.map(([icon,title,text]) => `<article class="parent-highlight"><span>${icon}</span><div><strong>${title}</strong><p>${text}</p></div></article>`).join("");
+  $("#parent-suggestion-text").textContent = suggestion;
+  parentReportText = `${data.player.name} — positieve Speelplaneet-terugblik\n\n${highlights.map(([,title,text]) => `${title}: ${text}`).join("\n")}\n\nRustige volgende stap: ${suggestion}\n\nGeen ranglijst of vergelijking met andere kinderen.`;
+}
+
+$("#copy-parent-report").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(parentReportText); toast("De positieve samenvatting is gekopieerd."); }
+  catch { toast("Kopiëren lukte niet op dit apparaat."); }
+});
+
+$("#parent-dashboard").addEventListener("click", () => {
+  if (!state.authToken) return toast("Meld dit profiel eerst online aan.");
+  parentCodeSession = "";
+  $("#parent-unlock-form").reset();
+  $("#parent-unlock-form").classList.remove("hidden");
+  $("#parent-dashboard-content").classList.add("hidden");
+  parentDialog.showModal();
+  setTimeout(() => $("#dashboard-parent-code").focus(), 50);
+});
+$("#close-parent-dialog").addEventListener("click", () => parentDialog.close());
+$("#parent-unlock-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  parentCodeSession = $("#dashboard-parent-code").value;
+  try { renderParentDashboard(await parentRequest("overview")); }
+  catch (error) {
+    const messages = { RECOVERY_NOT_SET:"Stel eerst Ouderherstel in.", WRONG_PARENT_CODE:"De oudercode klopt niet.", TEMPORARILY_LOCKED:"Te veel pogingen. Probeer over 15 minuten opnieuw." };
+    toast(messages[error.code] || "De ouderomgeving kon niet worden geopend.");
+  }
+});
+$("#parent-settings-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const settings = {
+    multiplayerEnabled:$("#setting-multiplayer").checked,
+    paused:$("#setting-paused").checked,
+    wordLevel:$("#setting-word-level").value,
+    mathLevel:$("#setting-math-level").value,
+  };
+  try {
+    renderParentDashboard(await parentRequest("settings", settings));
+    renderHome();
+    toast("Ouderinstellingen veilig bewaard.");
+  } catch { toast("De instellingen konden niet worden bewaard."); }
+});
+$("#export-parent-data").addEventListener("click", async () => {
+  try {
+    const data = await parentRequest("export");
+    const blob = new Blob([JSON.stringify(data.export, null, 2)], { type:"application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `speelplaneet-${state.player.name.toLowerCase().replace(/[^a-z0-9]+/g,"-")}.json`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    toast("Gegevensbestand gedownload.");
+  } catch { toast("De gegevens konden niet worden gedownload."); }
+});
+$("#delete-player-profile").addEventListener("click", async () => {
+  if (!window.confirm(`Alle voortgang van ${state.player.name} wordt definitief verwijderd. Wil je echt doorgaan?`)) return;
+  if (!window.confirm("Dit kan niet ongedaan worden gemaakt. Profiel nu verwijderen?")) return;
+  try {
+    await parentRequest("delete");
+    localStorage.removeItem("speelplaneet-auth-token");
+    localStorage.removeItem("speelplaneet-player");
+    localStorage.removeItem(playerProgressKey(state.player.name));
+    localStorage.removeItem(parentSettingsKey(state.player.name));
+    localStorage.removeItem("speelplaneet-progress");
+    window.location.reload();
+  } catch { toast("Het profiel kon niet worden verwijderd."); }
+});
+
 let recoveryMode = "reset";
 const recoveryDialog = $("#recovery-dialog");
 
@@ -1382,6 +2281,7 @@ $("#login-form").addEventListener("submit", async event => {
   button.textContent = "Even aanmelden…";
   const stored = localStorage.getItem(playerProgressKey(name));
   const localProgress = stored ? JSON.parse(stored) : { stars:0, completed:[], gameWins:{}, levels:{}, runnerHighscores:{} };
+  state.parentSettings = JSON.parse(localStorage.getItem(parentSettingsKey(name)) || "null");
   try {
     const response = await fetch("/api/auth", {
       method: "POST",
@@ -1394,6 +2294,7 @@ $("#login-form").addEventListener("submit", async event => {
     if (!response.ok) throw new Error(data.error || "offline");
     state.player = data.player;
     state.authToken = data.token;
+    setParentSettings(data.settings);
     state.progress = mergeProgress(localProgress, data.progress);
     localStorage.setItem("speelplaneet-auth-token", state.authToken);
     saveProgress();
@@ -1401,7 +2302,7 @@ $("#login-form").addEventListener("submit", async event => {
   } catch {
     state.player = { name };
     state.authToken = "";
-    state.progress = localProgress;
+    state.progress = mergeProgress(localProgress, {});
     setSyncStatus("Offline bewaard");
     toast("Je speelt lokaal; online synchronisatie is nu niet bereikbaar.");
   } finally {
@@ -1414,6 +2315,40 @@ $("#login-form").addEventListener("submit", async event => {
 });
 
 document.querySelectorAll('[data-action="home"]').forEach(button => button.addEventListener("click", renderHome));
+$("#accessibility-button").addEventListener("click", () => {
+  applyAccessibility();
+  $("#accessibility-dialog").showModal();
+  if (accessibility.music) setMusic(true);
+});
+$("#privacy-button").addEventListener("click", () => $("#privacy-dialog").showModal());
+$("#close-privacy").addEventListener("click", () => $("#privacy-dialog").close());
+$("#close-accessibility").addEventListener("click", () => $("#accessibility-dialog").close());
+document.querySelectorAll("[data-accessibility]").forEach(input => input.addEventListener("change", () => {
+  accessibility[input.dataset.accessibility] = input.checked;
+  localStorage.setItem("speelplaneet-accessibility", JSON.stringify(accessibility));
+  applyAccessibility();
+  if (input.dataset.accessibility === "music") setMusic(input.checked);
+}));
+const finishTutorial = () => {
+  const dialog = $("#tutorial-dialog");
+  if (dialog.dataset.game) localStorage.setItem(`speelplaneet-tutorial-${dialog.dataset.game}`, "1");
+  dialog.close();
+};
+$("#close-tutorial").addEventListener("click", finishTutorial);
+$("#tutorial-start").addEventListener("click", finishTutorial);
+$("#fullscreen-game").addEventListener("click", async () => {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await gameScreen.requestFullscreen();
+  } catch { toast("Volledig scherm wordt op dit apparaat niet ondersteund."); }
+});
+$("#pause-game").addEventListener("click", () => {
+  if (state.gamePaused) resumeActiveGame();
+  else pauseActiveGame();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseActiveGame();
+});
 $("#reset-profile").addEventListener("click", () => {
   const oldToken = state.authToken;
   if (oldToken) fetch("/api/logout", { method:"POST", headers:{ Authorization:`Bearer ${oldToken}` } }).catch(() => {});
@@ -1421,6 +2356,7 @@ $("#reset-profile").addEventListener("click", () => {
   localStorage.removeItem("speelplaneet-auth-token");
   state.player = null;
   state.authToken = "";
+  state.parentSettings = null;
   state.progress = { stars:0, completed:[], gameWins:{}, levels:{}, runnerHighscores:{} };
   dashboardView.classList.add("hidden");
   loginView.classList.remove("hidden");
@@ -1432,6 +2368,54 @@ if (state.player) {
   showDashboard();
   refreshCloudProgress();
 }
+
+let deferredInstallPrompt = null;
+const installButton = $("#install-app");
+const connectivityBanner = $("#connectivity-banner");
+const updateBanner = $("#update-banner");
+function updateConnectivityStatus() {
+  connectivityBanner.classList.toggle("hidden", navigator.onLine);
+  if (navigator.onLine && state.player) setSyncStatus(state.authToken ? "Online" : "Lokaal profiel",Boolean(state.authToken));
+  if (!navigator.onLine && state.player) setSyncStatus("Offline bewaard");
+}
+window.addEventListener("online", () => {
+  updateConnectivityStatus();
+  toast("Je bent weer online. De voortgang wordt bijgewerkt.");
+  refreshCloudProgress();
+});
+window.addEventListener("offline", updateConnectivityStatus);
+updateConnectivityStatus();
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  installButton.classList.remove("hidden");
+});
+installButton.addEventListener("click", async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  const choice = await deferredInstallPrompt.userChoice;
+  if (choice.outcome === "accepted") installButton.classList.add("hidden");
+  deferredInstallPrompt = null;
+});
+window.addEventListener("appinstalled", () => {
+  installButton.classList.add("hidden");
+  deferredInstallPrompt = null;
+  toast("Speelplaneet staat nu als app op dit toestel!");
+});
+$("#dismiss-update").addEventListener("click", () => updateBanner.classList.add("hidden"));
+$("#apply-update").addEventListener("click", () => window.location.reload());
+
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("/service-worker.js").catch(() => {}));
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("/service-worker.js");
+      registration.addEventListener("updatefound", () => {
+        const worker = registration.installing;
+        worker?.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) updateBanner.classList.remove("hidden");
+        });
+      });
+      setInterval(() => registration.update().catch(() => {}), 60 * 60 * 1000);
+    } catch {}
+  });
 }

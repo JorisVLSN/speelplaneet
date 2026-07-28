@@ -5,7 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#fff7e8" />
     <meta name="description" content="Een vrolijke, veilige speelplek vol puzzels en spelletjes." />
+    <meta name="application-name" content="Speelplaneet" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Speelplaneet</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/assets/speelplaneet-app-icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/speelplaneet-app-icon-192.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet" />
@@ -40,6 +46,8 @@
         <header class="topbar">
           <button class="brand brand-button" data-action="home"><span class="brand-mark">✦</span> Speelplaneet</button>
           <div class="profile-chip">
+            <button class="accessibility-button" id="privacy-button" aria-label="Privacy voor ouders">🔒</button>
+            <button class="accessibility-button" id="accessibility-button" aria-label="Toegankelijkheid en geluid">⚙️</button>
             <div class="avatar" id="avatar">N</div>
             <div><small id="sync-status">Op dit apparaat</small><strong id="profile-name">Noor</strong></div>
             <div class="level-pill">⭐ <span id="header-stars">0</span></div>
@@ -72,23 +80,65 @@
             </div>
 
             <div class="section-heading">
-              <div><p class="eyebrow">KIES EEN SPEL</p><h3>Jouw favorieten</h3></div>
+              <div><p class="eyebrow">KIES EEN SPEL</p><h3>Jouw spellen</h3></div>
               <div class="profile-actions">
+                <button class="text-button hidden" id="continue-game">Verder spelen</button>
+                <button class="text-button tournament-button" id="family-tournament">☄️ Gezinstoernooi</button>
+                <button class="text-button" id="parent-dashboard">Ouderomgeving</button>
                 <button class="text-button" id="parent-recovery">Ouderherstel</button>
                 <button class="text-button" id="reset-profile">Ander profiel</button>
               </div>
             </div>
+            <div class="category-filters" id="category-filters"></div>
             <div id="game-grid" class="game-grid"></div>
 
-            <section class="daily-card">
-              <div class="daily-icon">☀️</div>
-              <div><p class="eyebrow">DAGELIJKSE MISSIE</p><h3>Verdien een bonusster!</h3><p>Voltooi vandaag twee verschillende spellen.</p></div>
-              <div class="daily-progress"><strong id="daily-count">0 / 2</strong><span>spellen klaar</span></div>
+            <div class="mission-grid">
+              <section class="daily-card">
+                <div class="daily-icon">☀️</div>
+                <div><p class="eyebrow">DAGELIJKSE MISSIE</p><h3>Twee verschillende spellen</h3><p id="daily-mission-text">Verdien een bonusster zonder tijdsdruk.</p></div>
+                <div class="daily-progress"><strong id="daily-count">0 / 2</strong><span>spellen klaar</span></div>
+              </section>
+              <section class="daily-card weekly-card">
+                <div class="daily-icon">🪐</div>
+                <div><p class="eyebrow">WEKELIJKSE MISSIE</p><h3>Zeven ruimtemissies</h3><p id="weekly-mission-text">Verdien drie bonussterren deze week.</p></div>
+                <div class="daily-progress"><strong id="weekly-count">0 / 7</strong><span>missies klaar</span></div>
+              </section>
+            </div>
+            <section class="family-challenge-card" aria-labelledby="family-challenge-title">
+              <div class="family-challenge-header">
+                <div>
+                  <p class="eyebrow">SAMEN OP RUIMTEMISSIE</p>
+                  <h3 id="family-challenge-title">De gezinsuitdaging</h3>
+                  <p>Ellie, Mila en Mats vullen samen de sterrenmotor. Iedere voltooide ronde helpt.</p>
+                </div>
+                <div class="family-total" aria-live="polite"><strong id="family-stars">0</strong><span>/ 20 sterren</span></div>
+              </div>
+              <div class="family-progress-track" role="progressbar" aria-label="Voortgang gezinsuitdaging" aria-valuemin="0" aria-valuemax="20" aria-valuenow="0">
+                <span id="family-progress"></span>
+              </div>
+              <div id="family-contributors" class="family-contributors"></div>
+              <div id="family-rewards" class="family-rewards"></div>
+              <small id="family-reset-note">De gezamenlijke ruimtemissie start iedere maandag opnieuw.</small>
+            </section>
+            <section class="season-card" aria-labelledby="season-title">
+              <div class="season-sky" aria-hidden="true"><span>✦</span><span>●</span><span>✧</span></div>
+              <div class="season-content">
+                <p class="eyebrow" id="season-eyebrow">SEIZOENSWERELD</p>
+                <h3 id="season-title">Zomerse sterrenbaai</h3>
+                <p id="season-description">Ontdek verschillende spellen in deze tijdelijke ruimtewereld.</p>
+                <div class="season-progress-track" role="progressbar" aria-label="Voortgang seizoensmissie" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0"><span id="season-progress"></span></div>
+                <div id="season-missions" class="season-missions"></div>
+                <small id="season-archive-count"></small>
+              </div>
+            </section>
+            <section class="collection-card">
+              <div><p class="eyebrow">JOUW RUIMTEVERZAMELING</p><h3>Ontdekte beloningen</h3></div>
+              <div id="reward-shelf" class="reward-shelf"></div>
             </section>
           </section>
 
           <section id="game-screen" class="hidden">
-            <button class="back-button" data-action="home">← Terug naar alle spellen</button>
+            <div class="game-screen-actions"><button class="back-button" data-action="home">← Terug naar alle spellen</button><div><button class="text-button hidden" id="pause-game">⏸ Pauze</button><button class="text-button" id="fullscreen-game">⛶ Volledig scherm</button></div></div>
             <div id="game-stage"></div>
           </section>
         </div>
@@ -96,6 +146,70 @@
     </main>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="connectivity-banner" class="connectivity-banner hidden" role="status">📡 Je speelt offline. Je voortgang blijft veilig op dit toestel.</div>
+    <button id="install-app" class="install-app-button hidden" type="button">➕ Installeer Speelplaneet</button>
+    <div id="update-banner" class="update-banner hidden" role="status">
+      <span>🚀 Een nieuwe Speelplaneet-versie staat klaar.</span>
+      <button type="button" id="apply-update">Nu vernieuwen</button>
+      <button type="button" id="dismiss-update" aria-label="Later vernieuwen">Later</button>
+    </div>
+    <dialog id="accessibility-dialog" class="recovery-dialog">
+      <button class="dialog-close" type="button" id="close-accessibility" aria-label="Sluiten">×</button>
+      <p class="eyebrow">INSTELLINGEN</p><h2>Beeld, beweging en geluid</h2>
+      <div class="accessibility-settings">
+        <label class="setting-toggle"><span><strong>Grotere tekst</strong><small>Maakt tekst en knoppen groter.</small></span><input type="checkbox" data-accessibility="largeText"></label>
+        <label class="setting-toggle"><span><strong>Hoog contrast</strong><small>Duidelijkere kleuren en randen.</small></span><input type="checkbox" data-accessibility="highContrast"></label>
+        <label class="setting-toggle"><span><strong>Minder beweging</strong><small>Schakelt decoratieve animaties uit.</small></span><input type="checkbox" data-accessibility="reducedMotion"></label>
+        <label class="setting-toggle"><span><strong>Extra kleursymbolen</strong><small>Helpt kleuren van elkaar onderscheiden.</small></span><input type="checkbox" data-accessibility="colorSymbols"></label>
+        <label class="setting-toggle"><span><strong>Spelgeluiden</strong><small>Korte geluidjes bij meldingen.</small></span><input type="checkbox" data-accessibility="sound"></label>
+        <label class="setting-toggle"><span><strong>Rustige muziek</strong><small>Zachte achtergrondtonen.</small></span><input type="checkbox" data-accessibility="music"></label>
+        <label class="setting-toggle"><span><strong>Gesproken uitleg</strong><small>Leest de uitleg bij het openen van een spel voor.</small></span><input type="checkbox" data-accessibility="speech"></label>
+      </div>
+    </dialog>
+    <dialog id="tutorial-dialog" class="recovery-dialog">
+      <button class="dialog-close" type="button" id="close-tutorial" aria-label="Sluiten">×</button>
+      <p class="eyebrow">EERSTE KEER</p><h2 id="tutorial-title">Zo speel je</h2><p id="tutorial-text"></p>
+      <button class="primary-button" type="button" id="tutorial-start">Ik snap het — starten!</button>
+    </dialog>
+    <dialog id="privacy-dialog" class="parent-dialog privacy-dialog">
+      <button class="dialog-close" type="button" id="close-privacy" aria-label="Sluiten">×</button>
+      <p class="eyebrow">PRIVACY VOOR OUDERS</p><h2>Hoe Speelplaneet met gegevens omgaat</h2>
+      <div class="privacy-sections">
+        <section><h3>Welke gegevens?</h3><p>Alleen de gekozen spelersnaam, beveiligde pincode, voortgang, spelinstellingen, resultaten en noodzakelijke technische foutinformatie. Er is geen vrije chat, openbaar profiel, advertentieprofiel of locatietracking.</p></section>
+        <section><h3>Waarom?</h3><p>Om veilig aan te melden, voortgang tussen apparaten te bewaren, ouderinstellingen toe te passen en technische problemen op te lossen.</p></section>
+        <section><h3>Bewaartermijnen</h3><p>Spelersgegevens blijven bewaard tot een ouder het profiel verwijdert. Sessies verlopen na 30 dagen, online spelkamers na 24 uur en technische foutmeldingen horen maximaal 30 dagen te worden bewaard.</p></section>
+        <section><h3>Toestemming en controle</h3><p>Een ouder stelt de zescijferige oudercode in en beheert daarna multiplayer, niveaus, pauzeren, exporteren en verwijderen. Daarmee houdt de ouder controle over het profiel.</p></section>
+        <section><h3>Exporteren of verwijderen</h3><p>Open de Ouderomgeving om een leesbaar gegevensbestand te downloaden of alle profielgegevens definitief te verwijderen.</p></section>
+        <section><h3>Beveiliging</h3><p>Pincodes en oudercodes worden niet leesbaar opgeslagen. Beveiligde serverfuncties controleren accounts, kamers en ouderacties.</p></section>
+      </div>
+    </dialog>
+    <dialog id="tournament-dialog" class="recovery-dialog tournament-dialog">
+      <button class="dialog-close" type="button" id="close-tournament" aria-label="Sluiten">×</button>
+      <p class="eyebrow">SAMEN OP ÉÉN TOESTEL</p>
+      <h2>Gezinstoernooi</h2>
+      <div id="tournament-setup">
+        <p>Kies minstens twee spelers. Na iedere korte ronde geef je het toestel door.</p>
+        <fieldset class="tournament-player-choice">
+          <legend>Wie spelen mee?</legend>
+          <label><input type="checkbox" name="tournament-player" value="Ellie" checked><span>E</span> Ellie</label>
+          <label><input type="checkbox" name="tournament-player" value="Mila" checked><span>M</span> Mila</label>
+          <label><input type="checkbox" name="tournament-player" value="Mats" checked><span>M</span> Mats</label>
+        </fieldset>
+        <label>Aantal korte rondes
+          <select id="tournament-rounds"><option value="3">3 rondes</option><option value="6" selected>6 rondes</option><option value="9">9 rondes</option></select>
+        </label>
+        <button class="primary-button" type="button" id="start-tournament">Start het toernooi</button>
+      </div>
+      <div id="tournament-status" class="hidden">
+        <div id="tournament-scoreboard" class="tournament-scoreboard"></div>
+        <div class="pass-device-card">
+          <span id="tournament-player-avatar">E</span>
+          <div><small id="tournament-round-label">RONDE 1 VAN 6</small><h3 id="tournament-next-player">Ellie is aan de beurt</h3><p id="tournament-next-game">Maak je klaar voor het volgende spel.</p></div>
+        </div>
+        <button class="primary-button" type="button" id="tournament-next">Ik ben klaar — start ronde</button>
+        <button class="text-button" type="button" id="stop-tournament">Toernooi stoppen</button>
+      </div>
+    </dialog>
     <dialog id="recovery-dialog" class="recovery-dialog">
       <button class="dialog-close" type="button" id="close-recovery" aria-label="Sluiten">×</button>
       <p class="eyebrow">VOOR OUDERS</p>
@@ -116,7 +230,51 @@
       </form>
       <p class="privacy-note">Bewaar de oudercode buiten het bereik van de kinderen.</p>
     </dialog>
+    <dialog id="parent-dialog" class="parent-dialog">
+      <button class="dialog-close" type="button" id="close-parent-dialog" aria-label="Sluiten">×</button>
+      <p class="eyebrow">BEVEILIGDE OUDEROMGEVING</p>
+      <h2>Overzicht en instellingen</h2>
+      <form id="parent-unlock-form">
+        <label for="dashboard-parent-code">Zescijferige oudercode</label>
+        <input id="dashboard-parent-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="••••••" required />
+        <button class="primary-button" type="submit">Open ouderomgeving</button>
+      </form>
+      <div id="parent-dashboard-content" class="hidden">
+        <div id="parent-summary" class="parent-summary"></div>
+        <section class="positive-parent-report" aria-labelledby="positive-report-title">
+          <div class="positive-report-heading">
+            <div><p class="eyebrow">POSITIEVE TERUGBLIK</p><h3 id="positive-report-title">Wat valt fijn op?</h3></div>
+            <button class="mini-button" type="button" id="copy-parent-report">Kopieer samenvatting</button>
+          </div>
+          <div id="parent-highlights" class="parent-highlight-grid"></div>
+          <div class="parent-suggestion">
+            <span>💡</span><div><strong>Een rustige volgende stap</strong><p id="parent-suggestion-text"></p></div>
+          </div>
+          <small>Dit rapport vergelijkt kinderen nooit met elkaar en gebruikt geen ranglijst.</small>
+        </section>
+        <h3>Speloverzicht</h3>
+        <div id="parent-game-stats" class="parent-game-stats"></div>
+        <h3>Instellingen voor dit profiel</h3>
+        <form id="parent-settings-form" class="parent-settings-form">
+          <label class="setting-toggle"><span><strong>Online multiplayer</strong><small>Kamers maken en via een joincode meedoen.</small></span><input id="setting-multiplayer" type="checkbox" /></label>
+          <label class="setting-toggle"><span><strong>Profiel pauzeren</strong><small>Spellen worden geblokkeerd tot een ouder dit weer uitzet.</small></span><input id="setting-paused" type="checkbox" /></label>
+          <label>Woordniveau
+            <select id="setting-word-level"><option value="auto">Automatisch</option><option value="basis">Basiswoorden</option><option value="gevorderd">Gevorderde woorden</option></select>
+          </label>
+          <label>Rekenniveau
+            <select id="setting-math-level"><option value="auto">Automatisch</option><option value="basis">Optellen en aftrekken</option><option value="tafels">Tafels oefenen</option><option value="gemengd">Gemengde bewerkingen</option></select>
+          </label>
+          <button class="primary-button" type="submit">Instellingen bewaren</button>
+        </form>
+        <div class="parent-data-actions">
+          <button class="mini-button" type="button" id="export-parent-data">Download gegevens</button>
+          <button class="danger-button" type="button" id="delete-player-profile">Profiel volledig verwijderen</button>
+        </div>
+      </div>
+      <p class="privacy-note">Alleen iemand met de oudercode kan dit overzicht openen of instellingen wijzigen.</p>
+    </dialog>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="level-engine.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

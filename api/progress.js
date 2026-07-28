@@ -6,10 +6,12 @@ module.exports = async function handler(request, response) {
   try {
     const playerId = await sessionPlayer(request);
     if (!playerId) return response.status(401).json({ error: "INVALID_SESSION" });
+    const playerRows = await db(`players?id=eq.${playerId}&select=parent_settings&limit=1`);
+    const settings = playerRows?.[0]?.parent_settings || { multiplayerEnabled:true, wordLevel:"auto", mathLevel:"auto", paused:false };
 
     if (request.method === "GET") {
       const rows = await db(`player_progress?player_id=eq.${playerId}&select=progress&limit=1`);
-      return response.status(200).json({ progress: sanitizeProgress(rows?.[0]?.progress) });
+      return response.status(200).json({ progress: sanitizeProgress(rows?.[0]?.progress), settings });
     }
     if (request.method === "PUT") {
       const progress = sanitizeProgress(request.body?.progress);
@@ -17,7 +19,7 @@ module.exports = async function handler(request, response) {
         method: "PATCH",
         body: { progress, updated_at: new Date().toISOString() },
       });
-      return response.status(200).json({ progress });
+      return response.status(200).json({ progress, settings });
     }
     return response.status(405).json({ error: "METHOD_NOT_ALLOWED" });
   } catch (error) {

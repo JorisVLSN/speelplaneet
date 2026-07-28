@@ -1,4 +1,4 @@
-const { db, configured, sessionPlayer } = require("../server/supabase");
+const { db, configured, sessionPlayer, multiplayerAllowed } = require("../server/supabase");
 
 const FLEET_LENGTHS = [5, 4, 3, 3, 2];
 
@@ -54,6 +54,7 @@ function roomView(room, role) {
       phase: state.phase,
       turn: state.turn,
       winner: state.winner,
+      rematchReady: state.rematchReady || { host:false, guest:false },
       hits: state.hits,
       players: {
         host: {
@@ -86,6 +87,7 @@ module.exports = async function handler(request, response) {
   if (!configured()) return response.status(503).json({ error:"SYNC_NOT_CONFIGURED" });
   const playerId = await sessionPlayer(request).catch(() => null);
   if (!playerId) return response.status(401).json({ error:"LOGIN_REQUIRED" });
+  if (!await multiplayerAllowed(playerId)) return response.status(403).json({ error:"MULTIPLAYER_DISABLED" });
 
   try {
     if (request.method === "GET") {
@@ -174,11 +176,29 @@ module.exports = async function handler(request, response) {
       return response.status(200).json({ room:roomView(updated[0],role) });
     }
 
-    if (action === "rematch") {
-      const initial={phase:"placing",turn:"host",winner:null,ready:{host:false,guest:false},shots:{host:[],guest:[]},hits:{host:[],guest:[]}};
+    if (action === "forfeit") {
+      const state=structuredClone(room.public_state);
+      if(!room.guest_player_id)return response.status(409).json({error:"OPPONENT_REQUIRED"});
+      if(state.phase==="finished")return response.status(409).json({error:"GAME_FINISHED"});
+      state.phase="finished";state.winner=other;state.rematchReady={host:false,guest:false};
       const updated=await db(`battleship_rooms?id=eq.${room.id}&revision=eq.${room.revision}`,{
         method:"PATCH",
-        body:{public_state:initial,host_fleet:null,guest_fleet:null,status:"placing",revision:room.revision+1,updated_at:new Date().toISOString()},
+        body:{public_state:state,status:"finished",revision:room.revision+1,updated_at:new Date().toISOString()},
+      });
+      if(!updated?.[0])return response.status(409).json({error:"STALE_STATE"});
+      return response.status(200).json({room:roomView(updated[0],role)});
+    }
+
+    if (action === "rematch") {
+      if(room.public_state.phase!=="finished"||!room.guest_player_id)return response.status(409).json({error:"REMATCH_UNAVAILABLE"});
+      const waiting=structuredClone(room.public_state);
+      waiting.rematchReady ||= {host:false,guest:false};
+      waiting.rematchReady[role]=true;
+      const both=waiting.rematchReady.host&&waiting.rematchReady.guest;
+      const initial={phase:"placing",turn:"host",winner:null,ready:{host:false,guest:false},shots:{host:[],guest:[]},hits:{host:[],guest:[]},rematchReady:{host:false,guest:false}};
+      const updated=await db(`battleship_rooms?id=eq.${room.id}&revision=eq.${room.revision}`,{
+        method:"PATCH",
+        body:{public_state:both?initial:waiting,...(both?{host_fleet:null,guest_fleet:null}:{}),status:both?"placing":"finished",revision:room.revision+1,updated_at:new Date().toISOString()},
       });
       if(!updated?.[0])return response.status(409).json({error:"STALE_STATE"});
       return response.status(200).json({room:roomView(updated[0],role)});
@@ -186,6 +206,7 @@ module.exports = async function handler(request, response) {
     return response.status(400).json({ error:"UNKNOWN_ACTION" });
   } catch (error) {
     console.error("battleship_error", error.message);
+    if (playerId) await db("app_error_logs", { method:"POST", body:{ player_id:playerId, error_type:"battleship", message:String(error.message || "BATTLESHIP_FAILED").slice(0,500), context:String(request.body?.action || request.method).slice(0,100) } }).catch(() => {});
     return response.status(500).json({ error:"BATTLESHIP_FAILED" });
   }
 };
