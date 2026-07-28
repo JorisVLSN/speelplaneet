@@ -55,3 +55,40 @@ create index if not exists multiplayer_rooms_join_code_idx
 
 create index if not exists multiplayer_rooms_created_at_idx
   on public.multiplayer_rooms (created_at);
+
+create table if not exists public.players (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (char_length(name) between 1 and 16),
+  name_key text not null unique,
+  pin_salt text not null,
+  pin_hash text not null,
+  failed_attempts integer not null default 0,
+  locked_until timestamptz,
+  created_at timestamptz not null default now(),
+  last_login_at timestamptz
+);
+
+create table if not exists public.player_progress (
+  player_id uuid primary key references public.players(id) on delete cascade,
+  progress jsonb not null default '{"stars":0,"completed":[],"gameWins":{},"levels":{},"runnerHighscores":{}}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.player_sessions (
+  id uuid primary key default gen_random_uuid(),
+  player_id uuid not null references public.players(id) on delete cascade,
+  token_hash text not null unique,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+
+alter table public.players enable row level security;
+alter table public.player_progress enable row level security;
+alter table public.player_sessions enable row level security;
+
+revoke all on public.players from anon, authenticated;
+revoke all on public.player_progress from anon, authenticated;
+revoke all on public.player_sessions from anon, authenticated;
+
+create index if not exists player_sessions_token_hash_idx on public.player_sessions (token_hash);
+create index if not exists player_sessions_expires_at_idx on public.player_sessions (expires_at);

@@ -1,11 +1,14 @@
 # Speelplaneet productroadmap
 
-## Fase 1 — Betrouwbare basis
+## Fase 1 — Betrouwbare basis (gebouwd; databasepublicatie vereist)
 
-- Supabase-profielen met unieke speler-id, schermnaam en gehashte pincode.
-- Voortgang, sterren, levels, highscores en voorkeuren synchroniseren.
+- [x] Supabase-profielen met unieke speler-id, schermnaam en gehashte pincode.
+- [x] Voortgang, sterren, levels en Ruimterunner-highscores synchroniseren.
+- [x] Tijdelijke vergrendeling na vijf foutieve pincodes.
+- [x] Veilige sessies van dertig dagen en expliciet afmelden.
+- [x] Offline verder spelen met latere synchronisatie.
 - Oudercode en herstelprocedure zonder e-mail van het kind.
-- Database-migraties, foutregistratie en automatische back-ups.
+- Database-migraties, centrale foutregistratie en automatische back-ups.
 - Privacy: alleen minimale gegevens, geen openbare profielen of vrije chat.
 
 **Gereed wanneer:** een speler op een tweede apparaat met dezelfde naam en pincode verdergaat waar die gebleven was.

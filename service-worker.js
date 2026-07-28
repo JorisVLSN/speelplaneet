@@ -1,4 +1,4 @@
-const CACHE_NAME = "speelplaneet-offline-v6";
+const CACHE_NAME = "speelplaneet-offline-v7";
 const CORE_ASSETS = [
   "/",
   "/index.html",
@@ -24,6 +24,7 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
+  if (new URL(event.request.url).pathname.startsWith("/api/")) return;
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
       if (response.ok && new URL(event.request.url).origin === self.location.origin) {

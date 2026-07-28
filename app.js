@@ -15,6 +15,7 @@ const games = [
 const state = {
   player: JSON.parse(localStorage.getItem("speelplaneet-player") || "null"),
   progress: JSON.parse(localStorage.getItem("speelplaneet-progress") || '{"stars":0,"completed":[],"gameWins":{}}'),
+  authToken: localStorage.getItem("speelplaneet-auth-token") || "",
   activeGame: null,
   supabase: null,
   room: null,
@@ -24,9 +25,16 @@ const state = {
   inviteHandled: false,
   selectedLevels: {},
   gameCleanup: null,
+  syncTimer: 0,
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
+const playerProgressKey = name => `speelplaneet-progress-${String(name || "").normalize("NFKC").trim().toLocaleLowerCase("nl-BE")}`;
+if (state.player) {
+  const savedPlayerProgress = localStorage.getItem(playerProgressKey(state.player.name));
+  if (savedPlayerProgress) state.progress = JSON.parse(savedPlayerProgress);
+}
 state.progress.levels ||= {};
+state.progress.runnerHighscores ||= JSON.parse(localStorage.getItem("speelplaneet-runner-highscores") || "{}");
 
 const inviteParams = new URLSearchParams(window.location.search);
 const pendingInvite = {
@@ -43,6 +51,68 @@ const stage = $("#game-stage");
 
 function saveProgress() {
   localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
+  if (state.player?.name) localStorage.setItem(playerProgressKey(state.player.name), JSON.stringify(state.progress));
+  scheduleProgressSync();
+}
+
+function setSyncStatus(text, online = false) {
+  const element = $("#sync-status");
+  if (!element) return;
+  element.textContent = text;
+  element.classList.toggle("synced", online);
+}
+
+function mergeProgress(local, remote) {
+  const maxMap = (left = {}, right = {}) => Object.fromEntries(
+    [...new Set([...Object.keys(left), ...Object.keys(right)])].map(key => [key, Math.max(Number(left[key]) || 0, Number(right[key]) || 0)])
+  );
+  return {
+    stars: Math.max(Number(local?.stars) || 0, Number(remote?.stars) || 0),
+    completed: [...new Set([...(local?.completed || []), ...(remote?.completed || [])])],
+    gameWins: maxMap(local?.gameWins, remote?.gameWins),
+    levels: maxMap(local?.levels, remote?.levels),
+    runnerHighscores: maxMap(local?.runnerHighscores, remote?.runnerHighscores),
+  };
+}
+
+function scheduleProgressSync() {
+  if (!state.authToken) return;
+  clearTimeout(state.syncTimer);
+  setSyncStatus("Synchroniseren…");
+  state.syncTimer = setTimeout(async () => {
+    try {
+      const response = await fetch("/api/progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.authToken}` },
+        body: JSON.stringify({ progress: state.progress }),
+      });
+      if (!response.ok) throw new Error("sync");
+      setSyncStatus("Gesynchroniseerd", true);
+    } catch {
+      setSyncStatus("Offline bewaard");
+    }
+  }, 500);
+}
+
+async function refreshCloudProgress() {
+  if (!state.authToken) return;
+  try {
+    const response = await fetch("/api/progress", { headers: { Authorization: `Bearer ${state.authToken}` } });
+    if (response.status === 401) {
+      state.authToken = "";
+      localStorage.removeItem("speelplaneet-auth-token");
+      return setSyncStatus("Op dit apparaat");
+    }
+    if (!response.ok) throw new Error("sync");
+    const data = await response.json();
+    state.progress = mergeProgress(state.progress, data.progress);
+    localStorage.setItem("speelplaneet-progress", JSON.stringify(state.progress));
+    setSyncStatus("Gesynchroniseerd", true);
+    if (!homeScreen.classList.contains("hidden")) renderHome();
+    scheduleProgressSync();
+  } catch {
+    setSyncStatus("Offline bewaard");
+  }
 }
 
 function unlockedLevel(gameId = state.activeGame) {
@@ -261,6 +331,7 @@ function showDashboard() {
   dashboardView.classList.remove("hidden");
   $("#profile-name").textContent = state.player.name;
   $("#avatar").textContent = state.player.name[0].toUpperCase();
+  setSyncStatus(state.authToken ? "Synchroniseren…" : "Op dit apparaat", false);
   renderHome();
 }
 
@@ -745,7 +816,7 @@ function renderSpaceRunner() {
   let character = localStorage.getItem("speelplaneet-runner") || "ellie";
   if (!["ellie","mila","mats"].includes(character)) character = "ellie";
   const runnerName = name => ({ ellie:"Ellie", mila:"Mila", mats:"Mats" }[name] || "Ellie");
-  const runnerHighscores = JSON.parse(localStorage.getItem("speelplaneet-runner-highscores") || "{}");
+  const runnerHighscores = state.progress.runnerHighscores;
   let running = false, jumping = false, ducking = false, y = 0, velocity = 0, duckUntil = 0, duckTimer = 0;
   let passed = 0, distance = 0, nextSpawn = 1050 + random() * 700, lastTime = 0, frame = 0;
   const obstacles = [];
@@ -846,7 +917,7 @@ function renderSpaceRunner() {
     const isRecord = meters > previousBest;
     if (isRecord) {
       runnerHighscores[character] = meters;
-      localStorage.setItem("speelplaneet-runner-highscores", JSON.stringify(runnerHighscores));
+      saveProgress();
       $("#runner-best").textContent = meters;
     }
     $("#runner-start").classList.remove("hidden");
@@ -1141,12 +1212,43 @@ function renderBattleship() {
   wireMultiplayer("zeeslag", () => battle, applySeaState);
 }
 
-$("#login-form").addEventListener("submit", event => {
+$("#login-form").addEventListener("submit", async event => {
   event.preventDefault();
   const name = $("#player-name").value.trim();
   const pin = $("#player-pin").value;
   if (!name || !/^\d{4}$/.test(pin)) return;
-  state.player = { name, pinHint: pin.slice(-1) };
+  const button = event.currentTarget.querySelector("button[type=submit]");
+  const originalLabel = button.innerHTML;
+  button.disabled = true;
+  button.textContent = "Even aanmelden…";
+  const stored = localStorage.getItem(playerProgressKey(name));
+  const localProgress = stored ? JSON.parse(stored) : { stars:0, completed:[], gameWins:{}, levels:{}, runnerHighscores:{} };
+  try {
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, pin, initialProgress: localProgress }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) return toast("Deze pincode klopt niet.");
+    if (response.status === 429) return toast("Te veel pogingen. Wacht 15 minuten.");
+    if (!response.ok) throw new Error(data.error || "offline");
+    state.player = data.player;
+    state.authToken = data.token;
+    state.progress = mergeProgress(localProgress, data.progress);
+    localStorage.setItem("speelplaneet-auth-token", state.authToken);
+    saveProgress();
+    setSyncStatus("Gesynchroniseerd", true);
+  } catch {
+    state.player = { name };
+    state.authToken = "";
+    state.progress = localProgress;
+    setSyncStatus("Offline bewaard");
+    toast("Je speelt lokaal; online synchronisatie is nu niet bereikbaar.");
+  } finally {
+    button.disabled = false;
+    button.innerHTML = originalLabel;
+  }
   localStorage.setItem("speelplaneet-player", JSON.stringify(state.player));
   showDashboard();
   handlePendingInvite();
@@ -1154,15 +1256,23 @@ $("#login-form").addEventListener("submit", event => {
 
 document.querySelectorAll('[data-action="home"]').forEach(button => button.addEventListener("click", renderHome));
 $("#reset-profile").addEventListener("click", () => {
+  const oldToken = state.authToken;
+  if (oldToken) fetch("/api/logout", { method:"POST", headers:{ Authorization:`Bearer ${oldToken}` } }).catch(() => {});
   localStorage.removeItem("speelplaneet-player");
+  localStorage.removeItem("speelplaneet-auth-token");
   state.player = null;
+  state.authToken = "";
+  state.progress = { stars:0, completed:[], gameWins:{}, levels:{}, runnerHighscores:{} };
   dashboardView.classList.add("hidden");
   loginView.classList.remove("hidden");
   $("#player-name").focus();
 });
 
 initializeOnline();
-if (state.player) showDashboard();
+if (state.player) {
+  showDashboard();
+  refreshCloudProgress();
+}
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => navigator.serviceWorker.register("/service-worker.js").catch(() => {}));
 }

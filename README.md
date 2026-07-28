@@ -16,10 +16,12 @@ Open `index.html` rechtstreeks in een browser of start een eenvoudige lokale web
 ## Supabase en online multiplayer
 
 1. Open de SQL-editor in Supabase en voer `supabase/schema.sql` uit.
-2. Voeg in Vercel `SUPABASE_URL` en `SUPABASE_ANON_KEY` toe.
+2. Voeg in Vercel `SUPABASE_URL`, `SUPABASE_ANON_KEY` en `SUPABASE_SERVICE_ROLE_KEY` toe.
 3. Publiceer de site opnieuw.
 
-Zeeslag en galgje ondersteunen daarna online kamers met joincodes en gesynchroniseerde spelstanden. Zeeslag gebruikt een klassiek 10×10-bord, een vloot van vijf schepen, een plaatsingsfase en beurtelings schieten. Profielen, pincodes en puzzelvoortgang blijven in deze versie uitsluitend op het eigen apparaat.
+Zeeslag en galgje ondersteunen daarna online kamers met joincodes en gesynchroniseerde spelstanden. Zeeslag gebruikt een klassiek 10×10-bord, een vloot van vijf schepen, een plaatsingsfase en beurtelings schieten. Profielen en puzzelvoortgang synchroniseren via beveiligde Vercel-serverfuncties; zonder verbinding blijft de lokale voortgang beschikbaar.
+
+De service-role-key wordt uitsluitend door Vercel-serverfuncties gebruikt en mag nooit als `NEXT_PUBLIC_`-variabele worden ingesteld. Spelerpincodes worden met `scrypt` en een unieke salt gehasht. Sessietokens worden uitsluitend gehasht in Supabase opgeslagen.
 
 Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken de vorm `https://speelplaneet.vercel.app/?game=zeeslag&code=ABC-123` en openen na het aanmelden automatisch het juiste spel en de juiste kamer.
 
