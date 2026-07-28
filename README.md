@@ -25,6 +25,8 @@ De service-role-key wordt uitsluitend door Vercel-serverfuncties gebruikt en mag
 
 Na het aanmelden kan via **Ouderherstel** een zescijferige oudercode worden ingesteld. Daarmee kan op het aanmeldscherm een vergeten spelerspincode worden vervangen. Ook oudercodes worden gehasht en na vijf foutieve pogingen tijdelijk geblokkeerd.
 
+Online zeeslag gebruikt een afzonderlijke servergestuurde kamertabel. De server valideert vloten en schoten, houdt de tegenvloot geheim, voorkomt conflicterende zetten met revisienummers en ondersteunt herverbinden en revanche. Kamers verlopen automatisch na 24 uur.
+
 Bij iedere online kamer staat een WhatsApp-deelknop. Uitnodigingslinks gebruiken de vorm `https://speelplaneet.vercel.app/?game=zeeslag&code=ABC-123` en openen na het aanmelden automatisch het juiste spel en de juiste kamer.
 
 ## Spellen

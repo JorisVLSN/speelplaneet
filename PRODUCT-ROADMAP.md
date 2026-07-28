@@ -15,11 +15,13 @@
 
 ## Fase 2 — Veilige multiplayer
 
-- Alle zetten en spelregels servermatig controleren.
-- Verborgen zeeslagvloten nooit naar de tegenstander sturen.
-- Versienummers op spelstanden om dubbele of gelijktijdige zetten op te vangen.
-- Herverbinden, time-outs, verlopen kamers, rematch en vrijwillig opgeven.
-- Kamerstatus: wachten, verbonden, tegenstander offline en afgelopen.
+- [x] Zeeslagzetten en vlootopstellingen servermatig controleren.
+- [x] Verborgen zeeslagvloten nooit naar de tegenstander sturen.
+- [x] Revisienummers op zeeslagstanden om gelijktijdige zetten op te vangen.
+- [x] Zeeslag herverbinden, kamers na 24 uur laten verlopen en rematch toevoegen.
+- [x] Verbindingsstatus in online kamers tonen.
+- Galgje, Vier op een rij en Boter-kaas-en-eieren naar dezelfde servergestuurde architectuur migreren.
+- Vrijwillig opgeven en gedeelde rematchbevestiging toevoegen.
 - Uitnodigingslinks beperken tot de gekozen kamer en spelsoort.
 
 **Gereed wanneer:** onderbreken, herladen en gelijktijdig klikken geen spelstand kunnen beschadigen.

@@ -26,6 +26,7 @@ const state = {
   selectedLevels: {},
   gameCleanup: null,
   syncTimer: 0,
+  battleshipJoin: null,
 };
 localStorage.setItem("speelplaneet-session", state.sessionId);
 const playerProgressKey = name => `speelplaneet-progress-${String(name || "").normalize("NFKC").trim().toLocaleLowerCase("nl-BE")}`;
@@ -226,7 +227,11 @@ async function handlePendingInvite() {
   ) return;
   state.inviteHandled = true;
   openGame(pendingInvite.game);
-  await joinRoom(pendingInvite.code, pendingInvite.game);
+  if (pendingInvite.game === "zeeslag" && state.battleshipJoin) {
+    await state.battleshipJoin(pendingInvite.code);
+  } else {
+    await joinRoom(pendingInvite.code, pendingInvite.game);
+  }
   if (state.room) {
     document.querySelector("[data-room-details]")?.classList.remove("hidden");
     window.history.replaceState({}, "", window.location.pathname);
@@ -414,6 +419,8 @@ function sidePanel(title, text, code = true) {
         <div class="join-code" data-room-code>---</div>
         <button class="mini-button" data-copy-room>Kopieer joincode</button>
         <button class="whatsapp-button" data-share-whatsapp>Deel via WhatsApp</button>
+        <button class="mini-button hidden" data-rematch>Speel een revanche</button>
+        <div class="connection-status" data-connection-status><i></i><span>Verbonden</span></div>
         <p class="online-status" data-room-status>Wachten op de tweede speler…</p>
       </div>
     </div>` : ""}
@@ -448,6 +455,75 @@ function wireMultiplayer(gameType, getGameState, applyGameState) {
     const message = `Kom je ${gameName} met mij spelen op Speelplaneet? Open deze link en je komt meteen in mijn spel: ${invitationUrl}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
   });
+}
+
+function wireBattleshipMultiplayer(getFleet, applyGameState) {
+  const create = document.querySelector("[data-create-room]");
+  const join = document.querySelector("[data-join-room]");
+  const copy = document.querySelector("[data-copy-room]");
+  const share = document.querySelector("[data-share-whatsapp]");
+  const rematch = document.querySelector("[data-rematch]");
+  let pollTimer = 0;
+  const request = async (method, body) => {
+    if (!state.authToken) throw new Error("LOGIN_REQUIRED");
+    const url = method === "GET" ? `/api/battleship?id=${encodeURIComponent(body.id)}` : "/api/battleship";
+    const response = await fetch(url, {
+      method,
+      headers:{ "Content-Type":"application/json", Authorization:`Bearer ${state.authToken}` },
+      body:method === "GET" ? undefined : JSON.stringify(body),
+    });
+    const data = await response.json().catch(()=>({}));
+    if (!response.ok) { const error=new Error(data.error||"BATTLESHIP_FAILED");error.code=data.error;throw error; }
+    data.room.serverBattleship = true;
+    return data.room;
+  };
+  const accept = room => {
+    state.room = room;
+    updateRoomPanel(room);
+    document.querySelector("[data-room-details]")?.classList.remove("hidden");
+    applyGameState(room.game_state);
+    rematch?.classList.toggle("hidden",room.game_state.phase!=="finished");
+  };
+  const startPolling = () => {
+    clearInterval(pollTimer);
+    pollTimer = setInterval(async()=>{
+      if(!state.room?.serverBattleship)return;
+      try {
+        const room=await request("GET",{id:state.room.id});
+        if(room.revision!==state.room.revision)accept(room);
+        document.querySelector("[data-connection-status]")?.classList.remove("offline");
+      } catch {
+        document.querySelector("[data-connection-status]")?.classList.add("offline");
+      }
+    },1200);
+    state.gameCleanup=()=>{clearInterval(pollTimer);state.battleshipJoin=null;};
+  };
+  const errorMessage = error => ({
+    LOGIN_REQUIRED:"Meld dit profiel online aan om samen te spelen.",
+    ROOM_NOT_FOUND:"Deze kamer bestaat niet meer.",
+    ROOM_FULL:"Deze kamer heeft al twee spelers.",
+    STALE_STATE:"De spelstand veranderde. Probeer je zet opnieuw.",
+  }[error.code]||"Online zeeslag lukt nu niet. Probeer opnieuw.");
+
+  create.addEventListener("click",async()=>{
+    try{
+      const room=await request("POST",{action:"create"});
+      accept(room);startPolling();toast("Veilige zeeslagkamer aangemaakt.");
+      const fleet=getFleet();
+      if(fleet.length===5){const placed=await request("POST",{action:"place",roomId:room.id,ships:fleet});accept(placed);}
+    }catch(error){toast(errorMessage(error));}
+  });
+  const joinCode=async code=>{
+    try{const room=await request("POST",{action:"join",code});accept(room);startPolling();toast(`Je speelt tegen ${room.host_name}.`);return true;}
+    catch(error){toast(errorMessage(error));}
+    return false;
+  };
+  state.battleshipJoin=joinCode;
+  join.addEventListener("click",()=>joinCode(document.querySelector("[data-join-input]").value));
+  copy.addEventListener("click",async()=>{if(!state.room)return;try{await navigator.clipboard.writeText(state.room.join_code);}catch{}toast("Joincode gekopieerd!");});
+  share.addEventListener("click",()=>{if(!state.room)return;const url=`https://speelplaneet.vercel.app/?game=zeeslag&code=${encodeURIComponent(state.room.join_code)}`;const message=`Kom je Zeeslag met mij spelen op Speelplaneet? ${url}`;window.open(`https://wa.me/?text=${encodeURIComponent(message)}`,"_blank","noopener,noreferrer");});
+  rematch?.addEventListener("click",async()=>{try{accept(await request("POST",{action:"rematch",roomId:state.room.id}));toast("Nieuwe vloot plaatsen — revanche!");}catch{toast("Revanche starten lukt nog niet.");}});
+  return { request, accept };
 }
 
 function renderHangman() {
@@ -647,7 +723,7 @@ function renderTicTacToe() {
   const level = gameLevel("boterkaaseieren");
   const random = levelRng("boterkaaseieren", level);
   let game = { kind: "boterkaaseieren", board: Array(9).fill(null), turn: "host", winner: null };
-  const role = () => state.room && state.room.host_id !== state.sessionId ? "guest" : "host";
+  const role = () => state.room?.role || (state.room && state.room.host_id !== state.sessionId ? "guest" : "host");
   const mark = playerRole => playerRole === "host" ? "X" : "O";
   const winner = board => {
     const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
@@ -1096,6 +1172,7 @@ function renderBattleship() {
     const enemyCells = occupied(enemy);
     const enemyShots = new Set(enemy.shots);
     const myShots = new Set(mine.shots);
+    const myConfirmedHits = new Set(battle.hits?.[role()] || []);
 
     document.querySelectorAll("[data-own]").forEach(cell => {
       const index = Number(cell.dataset.own);
@@ -1111,8 +1188,9 @@ function renderBattleship() {
       const index = Number(cell.dataset.target);
       cell.className = "sea-cell";
       cell.textContent = "";
-      if (myShots.has(index) && enemyCells.has(index)) { cell.classList.add("hit"); cell.textContent = "✹"; }
-      if (myShots.has(index) && !enemyCells.has(index)) { cell.classList.add("miss"); cell.textContent = "•"; }
+      const confirmedHit = state.room?.serverBattleship ? myConfirmedHits.has(index) : enemyCells.has(index);
+      if (myShots.has(index) && confirmedHit) { cell.classList.add("hit"); cell.textContent = "✹"; }
+      if (myShots.has(index) && !confirmedHit) { cell.classList.add("miss"); cell.textContent = "•"; }
       if (battle.phase === "finished" && enemyCells.has(index)) cell.classList.add("revealed");
       cell.disabled = battle.phase !== "playing" || battle.turn !== role() || myShots.has(index);
     });
@@ -1146,6 +1224,7 @@ function renderBattleship() {
     battle = remote;
     drawBattle();
   };
+  let serverBattleControls = null;
 
   document.querySelectorAll("[data-ship-index]").forEach(button => button.addEventListener("click", () => {
     selectedShip = Number(button.dataset.shipIndex);
@@ -1162,6 +1241,13 @@ function renderBattleship() {
   });
   $("#fleet-ready").addEventListener("click", async () => {
     const mine = battle.players[role()];
+    if (state.room?.serverBattleship) {
+      try {
+        const room=await serverBattleControls.request("POST",{action:"place",roomId:state.room.id,ships:mine.ships});
+        serverBattleControls.accept(room);
+      } catch { toast("De vloot kon niet worden bewaard. Probeer opnieuw."); }
+      return;
+    }
     mine.ready = true;
     if (!state.room) {
       randomizeFleet(battle.players.guest);
@@ -1176,6 +1262,18 @@ function renderBattleship() {
   });
   document.querySelectorAll("[data-target]").forEach(cell => cell.addEventListener("click", async () => {
     if (cell.disabled) return;
+    if (state.room?.serverBattleship) {
+      cell.disabled=true;
+      try {
+        const room=await serverBattleControls.request("POST",{action:"shot",roomId:state.room.id,index:Number(cell.dataset.target)});
+        const won=room.game_state.phase==="finished"&&room.game_state.winner===room.role;
+        serverBattleControls.accept(room);
+        if(won)completeGame("zeeslag","Zeeslag gewonnen!");
+      } catch(error) {
+        toast(error.code==="NOT_YOUR_TURN"?"De tegenstander is eerst aan de beurt.":"De zet kon niet worden verwerkt.");
+      }
+      return;
+    }
     const mine = battle.players[role()];
     mine.shots.push(Number(cell.dataset.target));
     if (allSunk(opponentRole(), role())) {
@@ -1209,7 +1307,7 @@ function renderBattleship() {
     await syncGameState(battle);
   }));
   drawBattle();
-  wireMultiplayer("zeeslag", () => battle, applySeaState);
+  serverBattleControls=wireBattleshipMultiplayer(()=>battle.players[role()].ships,applySeaState);
 }
 
 let recoveryMode = "reset";

@@ -101,3 +101,25 @@ revoke all on public.player_sessions from anon, authenticated;
 
 create index if not exists player_sessions_token_hash_idx on public.player_sessions (token_hash);
 create index if not exists player_sessions_expires_at_idx on public.player_sessions (expires_at);
+
+create table if not exists public.battleship_rooms (
+  id uuid primary key default gen_random_uuid(),
+  join_code text not null unique check (join_code ~ '^[A-Z]{3}-[0-9]{3}$'),
+  host_player_id uuid not null references public.players(id) on delete cascade,
+  guest_player_id uuid references public.players(id) on delete set null,
+  host_name text not null,
+  guest_name text,
+  status text not null default 'waiting' check (status in ('waiting','placing','playing','finished')),
+  public_state jsonb not null default '{"phase":"placing","turn":"host","winner":null,"ready":{"host":false,"guest":false},"shots":{"host":[],"guest":[]},"hits":{"host":[],"guest":[]}}'::jsonb,
+  host_fleet jsonb,
+  guest_fleet jsonb,
+  revision integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  expires_at timestamptz not null default (now() + interval '24 hours')
+);
+
+alter table public.battleship_rooms enable row level security;
+revoke all on public.battleship_rooms from anon, authenticated;
+create index if not exists battleship_rooms_join_code_idx on public.battleship_rooms (join_code);
+create index if not exists battleship_rooms_expires_at_idx on public.battleship_rooms (expires_at);

@@ -226,6 +226,9 @@ input:focus { border-color: var(--orange); box-shadow: 0 0 0 4px #ffeadf; }
 .room-details { margin-top: 9px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,.2); text-align: center; }
 .room-details small { color: #bfc8d7; font-weight: 800; letter-spacing: 1px; }
 .online-status { margin-bottom: 0 !important; font-size: 13px; text-align: center; }
+.connection-status { display:flex;justify-content:center;align-items:center;gap:6px;margin-top:10px;color:#bce9cf;font-size:11px;font-weight:900; }
+.connection-status i { width:8px;height:8px;border-radius:50%;background:#52d08a; }
+.connection-status.offline { color:#ffc3ad; }.connection-status.offline i { background:#ff8450; }.connection-status.offline span { font-size:0; }.connection-status.offline span::after { content:"Verbinding herstellen…";font-size:11px; }
 .whatsapp-button {
   width: 100%; padding: 12px; border: 0; border-radius: 13px;
   color: white; background: #24a866; font-weight: 900;
